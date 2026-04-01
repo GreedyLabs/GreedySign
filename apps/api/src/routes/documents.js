@@ -6,12 +6,16 @@ import { requireDocAccess } from '../middleware/docAccess.js';
 import { PDFDocument } from 'pdf-lib';
 import { storePdf, readPdf, deletePdf } from '../services/storage.js';
 import { logAudit } from '../services/audit.js';
+import { getDocumentWithSigningStatus, getDocumentFields, getUserFieldValues, getUserSignaturePlacements } from '../services/queries.js';
+import sharesRouter from './shares.js';
+import signingRouter from './signing.js';
+import exportRouter from './export.js';
+import fieldsRouter from './fields.js';
 
 const router = Router();
 router.use(authMiddleware);
 
 router.get('/', async (req, res) => {
-  const userId = req.user.id;
   try {
     const userEmail = req.user.email;
     const { rows } = await query(
@@ -19,12 +23,13 @@ router.get('/', async (req, res) => {
               u.name AS owner_name, d.merge_mode,
               (u.email = $1) AS is_owner,
               ds.invite_status,
-              COALESCE(ds.signing_status, 'not_started') AS my_signing_status
+              COALESCE(ds.signing_status, 'not_started') AS my_signing_status,
+              (SELECT COUNT(*)::int FROM document_shares WHERE document_id = d.id AND invite_status = 'accepted') AS share_count
        FROM documents d
        JOIN users u ON d.owner_id = u.id
        LEFT JOIN document_shares ds ON ds.document_id = d.id AND ds.invitee_email = $1
        WHERE u.email = $1
-          OR ds.invite_status IN ('pending', 'accepted')
+          OR ds.invite_status IN ('pending', 'accepted', 'declined')
        ORDER BY d.updated_at DESC`,
       [userEmail]
     );
@@ -77,60 +82,20 @@ router.get('/:id/pdf', requireDocAccess, async (req, res) => {
 });
 
 router.get('/:id', requireDocAccess, async (req, res) => {
-  const userEmail = req.user.email;
-  const userId = req.user.id;
   try {
-    const { rows } = await query(
-      `SELECT d.id, d.name, d.size_bytes, d.page_count, d.created_at, d.merge_mode,
-              u.name AS owner_name, u.email AS owner_email,
-              (u.email = $2) AS is_owner,
-              COALESCE(ds.signing_status, 'not_started') AS my_signing_status
-       FROM documents d
-       JOIN users u ON d.owner_id = u.id
-       LEFT JOIN document_shares ds ON ds.document_id = d.id AND ds.invitee_email = $2
-       WHERE d.id = $1`,
-      [req.params.id, userEmail]
-    );
-    if (!rows.length) return res.status(404).json({ error: '문서를 찾을 수 없습니다' });
+    const doc = await getDocumentWithSigningStatus(req.params.id, req.user.email);
+    if (!doc) return res.status(404).json({ error: '문서를 찾을 수 없습니다' });
 
-    const { rows: fields } = await query(
-      'SELECT * FROM form_fields WHERE document_id=$1 ORDER BY page_number, id',
-      [req.params.id]
-    );
-    const { rows: values } = await query(
-      `SELECT fv.field_id, fv.value, fv.updated_at
-       FROM field_values fv
-       JOIN form_fields ff ON ff.id = fv.field_id
-       WHERE ff.document_id = $1 AND fv.user_id = $2`,
-      [req.params.id, userId]
-    );
-    const { rows: sigs } = await query(
-      'SELECT * FROM signature_placements WHERE document_id=$1 AND user_id=$2',
-      [req.params.id, userId]
-    );
+    const fields = await getDocumentFields(req.params.id);
+    const values = await getUserFieldValues(req.params.id, req.user.id);
+    const sigs = await getUserSignaturePlacements(req.params.id, req.user.id);
 
-    res.json({ ...rows[0], fields, myValues: values, mySignatures: sigs });
+    res.json({ ...doc, fields, myValues: values, mySignatures: sigs });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-router.put('/:id/merge-mode', async (req, res) => {
-  const { merge_mode } = req.body;
-  if (!['combined', 'individual'].includes(merge_mode))
-    return res.status(400).json({ error: '유효하지 않은 병합 방식입니다' });
-
-  try {
-    const { rows } = await query(
-      'UPDATE documents SET merge_mode=$1 WHERE id=$2 AND owner_id=$3 RETURNING id, merge_mode',
-      [merge_mode, req.params.id, req.user.id]
-    );
-    if (!rows.length) return res.status(403).json({ error: '권한이 없습니다' });
-    res.json(rows[0]);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
 
 router.delete('/:id', async (req, res) => {
   try {
@@ -145,5 +110,11 @@ router.delete('/:id', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+// 하위 라우터 마운트 (문서별 리소스)
+router.use('/:docId/shares', sharesRouter);
+router.use('/:docId/signing', signingRouter);
+router.use('/:docId/export', exportRouter);
+router.use('/:docId/fields', fieldsRouter);
 
 export default router;

@@ -4,9 +4,11 @@ import SigningStatusPanel from './SigningStatusPanel';
 import api from '../services/api';
 
 export default function Sidebar({
-  docId, isOwner, activeTool, setActiveTool, activeSignature, setActiveSignature,
+  docId, isOwner, signingDone, onSubmitSigning, onCancelSigning,
+  activeTool, setActiveTool, activeSignature, setActiveSignature,
   signatures, setSignatures, onExport, exporting,
   currentPage, totalPages, onPageChange,
+  onViewSignatures, viewingEmail,
 }) {
   const [showSigModal, setShowSigModal] = useState(false);
   const [editingSig, setEditingSig] = useState(null);
@@ -85,7 +87,7 @@ export default function Sidebar({
         </div>
       </div>
 
-      {isOwner && <SigningStatusPanel docId={docId} />}
+      {isOwner && <SigningStatusPanel docId={docId} onViewSignatures={onViewSignatures} viewingEmail={viewingEmail} />}
 
       <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -95,6 +97,26 @@ export default function Sidebar({
           <button onClick={() => onPageChange(currentPage + 1)} disabled={currentPage >= totalPages}
             style={{ padding: '6px 10px', border: '1px solid #d1d5db', borderRadius: 6, background: '#fff', cursor: 'pointer', fontSize: 13 }}>▶</button>
         </div>
+
+        {!isOwner && (
+          signingDone ? (
+            <>
+              <button disabled
+                style={{ width: '100%', padding: '9px', background: '#d1fae5', color: '#065f46', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 500, cursor: 'default' }}>
+                ✓ 서명 완료됨
+              </button>
+              <button onClick={onCancelSigning}
+                style={{ width: '100%', padding: '9px', background: '#fff', color: '#6b7280', border: '1px solid #d1d5db', borderRadius: 8, fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>
+                취소
+              </button>
+            </>
+          ) : (
+            <button onClick={onSubmitSigning}
+              style={{ width: '100%', padding: '9px', background: '#10b981', color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>
+              서명 완료
+            </button>
+          )
+        )}
 
         <button onClick={() => onExport('individual')} disabled={exporting}
           style={{ width: '100%', padding: '9px', background: '#10b981', color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>

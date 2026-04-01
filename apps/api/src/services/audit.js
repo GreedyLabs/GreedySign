@@ -21,7 +21,7 @@ export async function logAudit({ docId, userId, action, meta = null, req = null 
     await query(
       `INSERT INTO audit_logs (document_id, user_id, action, meta, ip, user_agent)
        VALUES ($1, $2, $3, $4, $5, $6)`,
-      [docId ?? null, userId ?? null, action, meta ? JSON.stringify(meta) : null, ip, userAgent]
+      [docId ?? null, userId ?? null, action, meta ?? null, ip, userAgent]
     );
   } catch (err) {
     // 로깅 실패가 본 요청을 막으면 안 됨

@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { OAuth2Client } from 'google-auth-library';
 import jwt from 'jsonwebtoken';
 import { query } from '../db/pool.js';
+import { authMiddleware } from '../middleware/auth.js';
 
 const router = Router();
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
@@ -42,20 +43,37 @@ router.post('/google', async (req, res) => {
   }
 });
 
-// GET /auth/me — 토큰으로 현재 사용자 조회
-router.get('/me', async (req, res) => {
-  const auth = req.headers.authorization;
-  if (!auth?.startsWith('Bearer ')) return res.status(401).json({ error: 'Unauthorized' });
+// GET /auth/users/search?q=xxx — 같은 도메인 사용자 검색
+router.get('/users/search', authMiddleware, async (req, res) => {
+  const domain = req.user.email.split('@')[1];
+  if (domain === 'localhost') return res.json([]);
+  const q = (req.query.q || '').toLowerCase();
+  if (!q) return res.json([]);
   try {
-    const payload = jwt.verify(auth.slice(7), process.env.JWT_SECRET);
+    const { rows } = await query(
+      `SELECT email, name FROM users
+       WHERE email LIKE $1 AND email != $2
+         AND (LOWER(email) LIKE $3 OR LOWER(name) LIKE $3)
+       ORDER BY name LIMIT 8`,
+      [`%@${domain}`, req.user.email, `%${q}%`]
+    );
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /auth/me — 토큰으로 현재 사용자 조회
+router.get('/me', authMiddleware, async (req, res) => {
+  try {
     const { rows } = await query(
       'SELECT id, email, name, avatar_url, created_at FROM users WHERE id=$1',
-      [payload.id]
+      [req.user.id]
     );
     if (!rows.length) return res.status(404).json({ error: '사용자를 찾을 수 없습니다' });
     res.json(rows[0]);
-  } catch {
-    res.status(401).json({ error: 'Invalid token' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 

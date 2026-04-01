@@ -34,8 +34,8 @@ services:
       SMTP_USER: ${SMTP_USER}
       SMTP_PASS: ${SMTP_PASS}
       SMTP_FROM: ${SMTP_FROM}
-    ports:
-      - "3001:3001"
+    expose:
+      - "3001"
     volumes:
       - uploads:/app/uploads
 

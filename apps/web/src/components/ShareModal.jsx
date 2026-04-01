@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import api from '../services/api';
+import { useUserSSE } from '../contexts/SSEContext';
 
 const statusLabel = {
   not_started: '미서명',
@@ -13,11 +14,14 @@ const statusColor = {
 };
 const inviteLabel = { pending: '대기', accepted: '수락', declined: '거절' };
 
-export default function ShareModal({ docId, mergeMode, onClose, onMergeModeChange }) {
+export default function ShareModal({ docId, onClose }) {
   const [shares, setShares] = useState([]);
-  const [email, setEmail] = useState('');
+  const [pendingEmails, setPendingEmails] = useState([]);
+  const [inputValue, setInputValue] = useState('');
+  const [suggestions, setSuggestions] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const searchTimer = useRef(null);
 
   useEffect(() => { loadShares(); }, []);
 
@@ -28,17 +32,84 @@ export default function ShareModal({ docId, mergeMode, onClose, onMergeModeChang
     } catch {}
   };
 
+  const handleUserEvent = useCallback((msg) => {
+    if (msg.type === 'share_status_changed' && msg.document_id === docId) {
+      loadShares();
+    }
+  }, [docId]);
+
+  useUserSSE(handleUserEvent);
+
+  const commitInput = (value) => {
+    const addr = value.trim();
+    if (addr && !pendingEmails.includes(addr)) {
+      setPendingEmails(prev => [...prev, addr]);
+    }
+    setInputValue('');
+    setSuggestions([]);
+  };
+
+  const handleInputKeyDown = (e) => {
+    if (e.key === ',' || e.key === 'Enter') {
+      e.preventDefault();
+      commitInput(inputValue);
+    } else if (e.key === 'Backspace' && inputValue === '' && pendingEmails.length) {
+      setPendingEmails(prev => prev.slice(0, -1));
+    } else if (e.key === 'Escape') {
+      setSuggestions([]);
+    }
+  };
+
+  const handleInputChange = (e) => {
+    const val = e.target.value;
+    if (val.endsWith(',')) {
+      commitInput(val.slice(0, -1));
+      return;
+    }
+    setInputValue(val);
+    clearTimeout(searchTimer.current);
+    if (val.trim().length < 1) { setSuggestions([]); return; }
+    searchTimer.current = setTimeout(async () => {
+      try {
+        const { data } = await api.get(`/auth/users/search?q=${encodeURIComponent(val.trim())}`);
+        setSuggestions(data.filter(u => !pendingEmails.includes(u.email)));
+      } catch {}
+    }, 200);
+  };
+
+  const selectSuggestion = (user) => {
+    if (!pendingEmails.includes(user.email)) {
+      setPendingEmails(prev => [...prev, user.email]);
+    }
+    setInputValue('');
+    setSuggestions([]);
+  };
+
+  const removePending = (addr) => setPendingEmails(prev => prev.filter(e => e !== addr));
+
   const handleInvite = async (e) => {
     e.preventDefault();
-    if (!email.trim()) return;
+    const extra = inputValue.trim();
+    const emails = extra ? [...pendingEmails, extra] : [...pendingEmails];
+    if (!emails.length) return;
     setLoading(true); setError('');
-    try {
-      await api.post(`/documents/${docId}/shares`, { email: email.trim() });
-      setEmail('');
-      await loadShares();
-    } catch (err) {
-      setError(err.response?.data?.error || '초대 실패');
-    } finally { setLoading(false); }
+    const errors = [];
+    const reInvited = [];
+    const existingEmails = new Set(shares.map(s => s.invitee_email));
+    for (const addr of emails) {
+      try {
+        await api.post(`/documents/${docId}/shares`, { email: addr });
+        if (existingEmails.has(addr)) reInvited.push(addr);
+      } catch (err) {
+        errors.push(`${addr}: ${err.response?.data?.error || '초대 실패'}`);
+      }
+    }
+    setPendingEmails([]);
+    setInputValue('');
+    await loadShares();
+    if (errors.length) setError(errors.join('\n'));
+    else if (reInvited.length) setError(`재초대 완료: ${reInvited.join(', ')} (초대 메일이 재발송되었습니다)`);
+    setLoading(false);
   };
 
   const handleRevoke = async (shareId) => {
@@ -51,14 +122,6 @@ export default function ShareModal({ docId, mergeMode, onClose, onMergeModeChang
     }
   };
 
-  const handleMergeModeChange = async (mode) => {
-    try {
-      await api.put(`/documents/${docId}/merge-mode`, { merge_mode: mode });
-      onMergeModeChange?.(mode);
-    } catch (err) {
-      alert(err.response?.data?.error || '변경 실패');
-    }
-  };
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
@@ -69,49 +132,65 @@ export default function ShareModal({ docId, mergeMode, onClose, onMergeModeChang
         </div>
 
         <div style={{ padding: '20px 24px', overflowY: 'auto', flex: 1 }}>
-          {/* 병합 방식 */}
-          <div style={{ marginBottom: 24 }}>
-            <p style={{ fontSize: 12, fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 10 }}>병합 방식</p>
-            <div style={{ display: 'flex', gap: 8 }}>
-              {[
-                { value: 'individual', label: '개별 병합', desc: '사용자별 분리 문서' },
-                { value: 'combined', label: '합본 병합', desc: '모든 서명 한 문서에' },
-              ].map(opt => (
-                <button key={opt.value} onClick={() => handleMergeModeChange(opt.value)}
-                  style={{
-                    flex: 1, padding: '10px 12px', borderRadius: 8, border: '1px solid',
-                    borderColor: mergeMode === opt.value ? '#3b82f6' : '#e5e7eb',
-                    background: mergeMode === opt.value ? '#eff6ff' : '#fff',
-                    color: mergeMode === opt.value ? '#1d4ed8' : '#374151',
-                    cursor: 'pointer', textAlign: 'left',
-                  }}>
-                  <div style={{ fontSize: 13, fontWeight: 500 }}>{opt.label}</div>
-                  <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 2 }}>{opt.desc}</div>
-                </button>
-              ))}
-            </div>
-          </div>
-
           {/* 초대 입력 */}
           <div style={{ marginBottom: 20 }}>
             <p style={{ fontSize: 12, fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 10 }}>서명자 초대</p>
-            <form onSubmit={handleInvite} style={{ display: 'flex', gap: 8 }}>
-              <input
-                type="email"
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                placeholder="이메일 주소 입력"
-                style={{ flex: 1, padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: 8, fontSize: 13, outline: 'none' }}
-              />
-              <button type="submit" disabled={loading || !email.trim()}
-                style={{ padding: '8px 16px', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                {loading ? '...' : '초대'}
-              </button>
+            <form onSubmit={handleInvite}>
+              <div style={{ position: 'relative' }}>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, padding: '6px 8px', border: '1px solid #d1d5db', borderRadius: 8, marginBottom: 8, minHeight: 38, alignItems: 'center' }}>
+                  {pendingEmails.map(addr => (
+                    <span key={addr} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px', background: '#eff6ff', color: '#1d4ed8', borderRadius: 12, fontSize: 12, fontWeight: 500 }}>
+                      {addr}
+                      <button type="button" onClick={() => removePending(addr)}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#93c5fd', fontSize: 14, lineHeight: 1, padding: 0 }}>×</button>
+                    </span>
+                  ))}
+                  <input
+                    type="text"
+                    value={inputValue}
+                    onChange={handleInputChange}
+                    onKeyDown={handleInputKeyDown}
+                    onBlur={() => setTimeout(() => setSuggestions([]), 150)}
+                    placeholder={pendingEmails.length ? '' : '이메일 입력 후 쉼표 또는 Enter'}
+                    style={{ flex: 1, minWidth: 160, border: 'none', outline: 'none', fontSize: 13, padding: '2px 4px' }}
+                  />
+                </div>
+                {suggestions.length > 0 && (
+                  <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.1)', zIndex: 10, overflow: 'hidden' }}>
+                    {suggestions.map(u => (
+                      <button key={u.email} type="button" onMouseDown={() => selectSuggestion(u)}
+                        style={{ width: '100%', padding: '8px 12px', border: 'none', background: 'none', cursor: 'pointer', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8 }}
+                        onMouseEnter={e => e.currentTarget.style.background = '#f9fafb'}
+                        onMouseLeave={e => e.currentTarget.style.background = 'none'}>
+                        <div>
+                          <div style={{ fontSize: 13, fontWeight: 500, color: '#111' }}>{u.name}</div>
+                          <div style={{ fontSize: 11, color: '#9ca3af' }}>{u.email}</div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                {pendingEmails.length > 0
+                  ? <span style={{ fontSize: 12, color: '#6b7280' }}>{pendingEmails.length + (inputValue.trim() ? 1 : 0)}명 초대 예정</span>
+                  : <span />}
+                <button type="submit" disabled={loading || (pendingEmails.length === 0 && !inputValue.trim())}
+                  style={{ padding: '7px 16px', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap', opacity: (loading || (pendingEmails.length === 0 && !inputValue.trim())) ? 0.5 : 1 }}>
+                  {loading ? '처리 중...' : '초대'}
+                </button>
+              </div>
             </form>
-            {error && <p style={{ color: '#e53e3e', fontSize: 12, marginTop: 6 }}>{error}</p>}
+            {error && (
+              <p style={{ color: error.startsWith('재초대') ? '#2563eb' : '#e53e3e', fontSize: 12, marginTop: 6, whiteSpace: 'pre-line' }}>{error}</p>
+            )}
           </div>
 
           {/* 공유 목록 */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+            <p style={{ fontSize: 12, fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em' }}>서명자 목록</p>
+            {shares.length > 0 && <span style={{ fontSize: 12, color: '#6b7280' }}>총 {shares.length}명</span>}
+          </div>
           {shares.length === 0 ? (
             <p style={{ fontSize: 13, color: '#9ca3af', textAlign: 'center', padding: '20px 0' }}>초대된 서명자가 없습니다</p>
           ) : (

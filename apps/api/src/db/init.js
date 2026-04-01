@@ -35,6 +35,7 @@ CREATE TABLE IF NOT EXISTS documents (
 CREATE TABLE IF NOT EXISTS form_fields (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   document_id UUID REFERENCES documents(id) ON DELETE CASCADE,
+  created_by UUID REFERENCES users(id) ON DELETE SET NULL,
   page_number INTEGER NOT NULL DEFAULT 1,
   field_type TEXT NOT NULL CHECK (field_type IN ('text', 'checkbox')),
   field_name TEXT,

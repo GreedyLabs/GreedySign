@@ -5,29 +5,33 @@ import fileUpload from 'express-fileupload';
 
 import authRouter from './routes/auth.js';
 import documentsRouter from './routes/documents.js';
-import eventsRouter from './routes/events.js';
-import fieldsRouter from './routes/fields.js';
+import fieldOperationsRouter from './routes/fieldOperations.js';
 import signaturesRouter from './routes/signatures.js';
-import sharesRouter from './routes/shares.js';
-import signingRouter from './routes/signing.js';
-import exportRouter from './routes/export.js';
+import eventsRouter from './routes/events.js';
 import inviteRouter from './routes/invite.js';
 
 const app = express();
 
-app.use(cors({ origin: '*' }));
+app.use(cors({ origin: process.env.APP_URL || '*' }));
 app.use(express.json({ limit: '10mb' }));
 app.use(fileUpload({ limits: { fileSize: 50 * 1024 * 1024 } }));
 
+// 인증
 app.use('/api/auth', authRouter);
-app.use('/api/documents', documentsRouter);  // GET|POST /documents, GET|DELETE /documents/:id ...
-app.use('/api/events', eventsRouter);        // GET /events/:id
-app.use('/api/documents', sharesRouter);     // GET|POST|DELETE /documents/:docId/shares ...
-app.use('/api/documents', signingRouter);    // PATCH /documents/:docId/signing/status
-app.use('/api/documents', exportRouter);     // POST /documents/:docId/export ...
-app.use('/api', fieldsRouter);               // POST /documents/:docId/fields, PUT|DELETE /fields/:id
-app.use('/api/signatures', signaturesRouter);// GET|POST /signatures, POST /documents/:docId/placements ...
 
+// 문서 (하위: shares, signing, export, fields, events)
+app.use('/api/documents', documentsRouter);
+
+// 필드 개별 작업 (ID 기반)
+app.use('/api/fields', fieldOperationsRouter);
+
+// 서명
+app.use('/api/signatures', signaturesRouter);
+
+// SSE 이벤트 (사용자 전역)
+app.use('/api/events', eventsRouter);
+
+// 초대
 app.use('/api/invite', inviteRouter);
 app.get('/health', (_, res) => res.json({ ok: true }));
 

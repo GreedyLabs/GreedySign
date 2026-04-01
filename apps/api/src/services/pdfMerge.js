@@ -39,11 +39,14 @@ export async function applyUserToPdf(pdfDoc, pages, userEmail, docId) {
         color: rgb(0, 0, 0),
       });
     } else if (val.field_type === 'checkbox' && val.value === 'true') {
-      page.drawText('✓', {
-        x: val.x + 2, y: val.y + 2,
-        size: val.height * 0.8,
-        color: rgb(0, 0, 0.8),
-      });
+      const cx = val.x + val.width * 0.2;
+      const cy = val.y + val.height * 0.45;
+      const mx = val.x + val.width * 0.45;
+      const my = val.y + val.height * 0.2;
+      const ex = val.x + val.width * 0.85;
+      const ey = val.y + val.height * 0.75;
+      page.drawLine({ start: { x: cx, y: cy }, end: { x: mx, y: my }, thickness: 1.5, color: rgb(0, 0, 0.8) });
+      page.drawLine({ start: { x: mx, y: my }, end: { x: ex, y: ey }, thickness: 1.5, color: rgb(0, 0, 0.8) });
     }
   }
 

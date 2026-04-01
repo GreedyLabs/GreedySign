@@ -2,14 +2,14 @@ import { Router } from 'express';
 import { query } from '../db/pool.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { requireDocAccess } from '../middleware/docAccess.js';
-import { broadcast } from '../services/sse.js';
+import { broadcast, notifyUser } from '../services/sse.js';
 import { logAudit } from '../services/audit.js';
 
-const router = Router();
+const router = Router({ mergeParams: true });
 router.use(authMiddleware);
 
-// PATCH /documents/:docId/signing/status — 내 서명 상태 업데이트
-router.patch('/:docId/signing/status', requireDocAccess, async (req, res) => {
+// PATCH /status — 내 서명 상태 업데이트
+router.patch('/status', requireDocAccess, async (req, res) => {
   const { docId } = req.params;
   const { status } = req.body;
   const userId = req.user.id;
@@ -29,7 +29,7 @@ router.patch('/:docId/signing/status', requireDocAccess, async (req, res) => {
     );
 
     if (ownerCheck.length) {
-      broadcast(docId, { type: 'signing_status_changed', userId, status });
+      broadcast(docId, { type: 'signing_status_changed', userId, status }, userId);
       if (status === 'completed') {
         await logAudit({ docId, userId, action: 'signing_completed', meta: { role: 'owner' }, req });
       } else if (status === 'in_progress') {
@@ -47,7 +47,14 @@ router.patch('/:docId/signing/status', requireDocAccess, async (req, res) => {
     );
     if (!rows.length) return res.status(403).json({ error: '접근 권한이 없습니다' });
 
-    broadcast(docId, { type: 'signing_status_changed', userId, status });
+    broadcast(docId, { type: 'signing_status_changed', userId, status }, userId);
+
+    // 문서 소유자에게 실시간 알림 전송 (Dashboard 갱신용)
+    notifyUser(rows[0].owner_id, {
+      type: 'signing_status_changed',
+      document_id: docId,
+    });
+
     if (status === 'completed') {
       await logAudit({ docId, userId, action: 'signing_completed', meta: { role: 'invitee' }, req });
     } else if (status === 'in_progress') {

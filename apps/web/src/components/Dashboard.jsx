@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useAuthStore } from '../stores/authStore';
 import api from '../services/api';
 import ShareModal from './ShareModal';
+import { useUserSSE } from '../contexts/SSEContext';
 
 const signingStatusLabel = { not_started: '서명 필요', in_progress: '진행 중', completed: '서명 완료' };
 const signingStatusColor = { not_started: '#f59e0b', in_progress: '#3b82f6', completed: '#10b981' };
@@ -23,6 +24,20 @@ export default function Dashboard({ onOpenDoc }) {
     } catch {}
   };
 
+  const handleUserEvent = useCallback((msg) => {
+    if (msg.type === 'document_shared') {
+      loadDocs();
+    } else if (msg.type === 'signing_status_changed') {
+      loadDocs();
+    } else if (msg.type === 'share_status_changed') {
+      loadDocs();
+    } else if (msg.type === 'share_revoked') {
+      setDocs(prev => prev.filter(d => d.id !== msg.document_id));
+    }
+  }, []);
+
+  useUserSSE(handleUserEvent);
+
   const handleUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -38,7 +53,12 @@ export default function Dashboard({ onOpenDoc }) {
   };
 
   const handleDelete = async (id) => {
-    if (!confirm('문서를 삭제하시겠습니까?')) return;
+    const doc = docs.find(d => d.id === id);
+    const shareCount = doc?.share_count || 0;
+    const msg = shareCount > 0
+      ? `이 문서는 ${shareCount}명에게 공유되어 있습니다.\n삭제하면 공유자도 더 이상 접근할 수 없습니다.\n정말 삭제하시겠습니까?`
+      : '문서를 삭제하시겠습니까?';
+    if (!confirm(msg)) return;
     await api.delete(`/documents/${id}`);
     setDocs(docs.filter(d => d.id !== id));
   };
@@ -66,6 +86,7 @@ export default function Dashboard({ onOpenDoc }) {
         <h1 style={{ fontSize: 18, fontWeight: 600 }}>GreedySign</h1>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <span style={{ fontSize: 13, color: '#6b7280' }}>{user?.name}</span>
+          <span style={{ fontSize: 12, color: '#9ca3af' }}>{user?.email}</span>
           <button onClick={logout} style={outlineBtnStyle}>로그아웃</button>
         </div>
       </header>
@@ -100,19 +121,25 @@ export default function Dashboard({ onOpenDoc }) {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 16 }}>
             {displayDocs.map(doc => {
               const isPending = !doc.is_owner && doc.invite_status === 'pending';
+              const isDeclined = !doc.is_owner && doc.invite_status === 'declined';
               return (
-                <div key={doc.id} style={cardStyle}>
+                <div key={doc.id} style={{ ...cardStyle, opacity: isDeclined ? 0.7 : 1 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
                     <div style={{ fontSize: 32 }}>📄</div>
-                    {!doc.is_owner && doc.my_signing_status && (
+                    {isDeclined ? (
+                      <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 12, background: '#fee2e2', color: '#ef4444', fontWeight: 500 }}>거절함</span>
+                    ) : (!doc.is_owner && doc.my_signing_status && (
                       <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 12, background: signingStatusColor[doc.my_signing_status] + '20', color: signingStatusColor[doc.my_signing_status], fontWeight: 500 }}>
                         {signingStatusLabel[doc.my_signing_status]}
                       </span>
-                    )}
+                    ))}
                   </div>
                   <h3 style={{ fontSize: 15, fontWeight: 500, marginBottom: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{doc.name}</h3>
                   <p style={{ fontSize: 12, color: '#9ca3af', marginBottom: 2 }}>{doc.page_count}페이지 · {formatSize(doc.size_bytes)}</p>
                   <p style={{ fontSize: 12, color: '#9ca3af', marginBottom: 16 }}>{doc.owner_name} · {formatDate(doc.updated_at)}</p>
+                  {isDeclined ? (
+                    <p style={{ fontSize: 12, color: '#9ca3af', textAlign: 'center' }}>소유자에게 재초대를 요청하세요</p>
+                  ) : (
                   <div style={{ display: 'flex', gap: 8 }}>
                     {isPending ? (
                       <>
@@ -131,6 +158,7 @@ export default function Dashboard({ onOpenDoc }) {
                       </>
                     )}
                   </div>
+                  )}
                 </div>
               );
             })}
@@ -141,9 +169,7 @@ export default function Dashboard({ onOpenDoc }) {
       {shareDocId && shareDoc && (
         <ShareModal
           docId={shareDocId}
-          mergeMode={shareDoc.merge_mode}
           onClose={() => setShareDocId(null)}
-          onMergeModeChange={(mode) => setDocs(prev => prev.map(d => d.id === shareDocId ? { ...d, merge_mode: mode } : d))}
         />
       )}
     </div>

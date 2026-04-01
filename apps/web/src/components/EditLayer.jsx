@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import api from '../services/api';
 
 const FIELD_COLORS = { text: '#3b82f6', checkbox: '#10b981', signature: '#8b5cf6' };
@@ -27,16 +27,47 @@ const MIN_PT = 10;
 export default function EditLayer({
   docId, fields, setFields, myValues, setMyValues,
   sigPlacements, setSigPlacements,
+  viewerPlacements = [],
+  viewerFields = [],
+  viewerValues = [],
   canvasSize, currentPage, activeTool, activeSignature, onToolUsed,
+  readOnly = false,
 }) {
   const [selectedId, setSelectedId] = useState(null);
   const svgRef = useRef(null);
   const interactRef = useRef(null);
   const fieldsRef = useRef(fields);
   const sigPlacementsRef = useRef(sigPlacements);
+  const fieldValueDebounceRef = useRef({});
+  const autoFocusIdRef = useRef(null);
 
   useEffect(() => { fieldsRef.current = fields; }, [fields]);
   useEffect(() => { sigPlacementsRef.current = sigPlacements; }, [sigPlacements]);
+
+  const deleteField = useCallback(async (id) => {
+    await api.delete(`/fields/${id}`);
+    setFields(prev => prev.filter(f => f.id !== id));
+    setSelectedId(null);
+  }, [setFields]);
+
+  const deleteSigPlacement = useCallback(async (id) => {
+    await api.delete(`/signatures/placements/${id}`);
+    setSigPlacements(prev => prev.filter(s => s.id !== id));
+    setSelectedId(null);
+  }, [setSigPlacements]);
+
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if (!selectedId || readOnly) return;
+      if (e.key !== 'Delete' && e.key !== 'Backspace') return;
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+      const isField = fieldsRef.current.some(f => f.id === selectedId);
+      if (isField) deleteField(selectedId);
+      else deleteSigPlacement(selectedId);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [selectedId, deleteField, deleteSigPlacement]);
 
   const sc = canvasSize.scale || 1;
   const pdfH = canvasSize.pdfHeight || (canvasSize.height / sc);
@@ -58,7 +89,7 @@ export default function EditLayer({
   const handleSvgClick = async (e) => {
     if (e.target !== svgRef.current) return;
     setSelectedId(null);
-    if (!activeTool) return;
+    if (!activeTool || readOnly) return;
     const cp = getCanvasPos(e);
 
     if (activeTool === 'text' || activeTool === 'checkbox') {
@@ -73,7 +104,9 @@ export default function EditLayer({
           x: xPt, y: yPt, width: wPt, height: hPt,
           page_number: currentPage,
         });
+        if (activeTool === 'text') autoFocusIdRef.current = data.id;
         setFields(prev => [...prev, data]);
+        setSelectedId(data.id);
         onToolUsed();
       } catch {}
 
@@ -98,6 +131,7 @@ export default function EditLayer({
   const startInteract = (e, id, type, mode) => {
     e.stopPropagation();
     setSelectedId(id);
+    if (readOnly) return;
     const cp = getCanvasPos(e);
     const obj = type === 'field'
       ? fields.find(f => f.id === id)
@@ -129,12 +163,17 @@ export default function EditLayer({
       }
       if (info.type === 'sig') {
         const newW = Math.max(MIN_PT, info.origW + dxPt);
-        return { ...obj, width: newW, height: newW / info.aspect };
+        const newH = newW / info.aspect;
+        const deltaH = newH - info.origH;
+        return { ...obj, width: newW, height: newH, y: info.origY - deltaH };
       }
+      const newH = Math.max(MIN_PT, info.origH + dyPt);
+      const deltaH = newH - info.origH;
       return {
         ...obj,
         width: Math.max(MIN_PT, info.origW + dxPt),
-        height: Math.max(MIN_PT, info.origH + dyPt),
+        height: newH,
+        y: info.origY - deltaH,
       };
     };
 
@@ -170,39 +209,38 @@ export default function EditLayer({
     }
   };
 
-  // ── 필드 값 변경 ───────────────────────────────────────────
-  const handleFieldValue = async (fieldId, value) => {
+  // ── 필드 값 변경 (디바운스 300ms) ────────────────────────────
+  const handleFieldValue = (fieldId, value) => {
+    if (readOnly) return;
     setMyValues(prev => {
       const idx = prev.findIndex(v => v.field_id === fieldId);
       if (idx >= 0) { const n = [...prev]; n[idx] = { ...n[idx], value }; return n; }
       return [...prev, { field_id: fieldId, value }];
     });
-    try {
-      await api.put(`/fields/${fieldId}/value`, { value });
-    } catch {}
-  };
-
-  const deleteField = async (id) => {
-    await api.delete(`/fields/${id}`);
-    setFields(prev => prev.filter(f => f.id !== id));
-    setSelectedId(null);
-  };
-
-  const deleteSigPlacement = async (id) => {
-    await api.delete(`/signatures/placements/${id}`);
-    setSigPlacements(prev => prev.filter(s => s.id !== id));
-    setSelectedId(null);
+    clearTimeout(fieldValueDebounceRef.current[fieldId]);
+    fieldValueDebounceRef.current[fieldId] = setTimeout(() => {
+      api.put(`/fields/${fieldId}/value`, { value }).catch(() => {});
+    }, 300);
   };
 
   const getMyValue = (fieldId) => myValues.find(v => v.field_id === fieldId)?.value || '';
   const pageFields = fields.filter(f => (f.page_number || 1) === currentPage);
   const pageSigs   = sigPlacements.filter(s => (s.page_number || 1) === currentPage);
+  const pageViewerSigs = viewerPlacements.filter(s => (s.page_number || 1) === currentPage);
+  const pageViewerFields = viewerFields.filter(f => (f.page_number || 1) === currentPage);
+  const getViewerValue = (fieldId) => viewerValues.find(v => v.field_id === fieldId)?.value || '';
 
   const ResizeHandle = ({ sx, sy, id, type }) => (
     <rect x={sx - 5} y={sy - 5} width={10} height={10} rx={2}
       fill="white" stroke="#6b7280" strokeWidth={1.5}
       style={{ cursor: 'nwse-resize' }}
       onMouseDown={e => startInteract(e, id, type, 'resize')} />
+  );
+
+  const DragHandle = ({ sx, sy, sw, id, type, color }) => (
+    <rect x={sx} y={sy - 20} width={sw} height={20} fill={color} opacity={0.9} rx={4}
+      style={{ cursor: 'grab' }}
+      onMouseDown={e => startInteract(e, id, type, 'drag')} />
   );
 
   return (
@@ -223,12 +261,18 @@ export default function EditLayer({
             <rect x={sx} y={sy} width={sw} height={sh}
               fill={`${color}18`} stroke={color} strokeWidth={isSelected ? 2 : 1}
               strokeDasharray={isSelected ? 'none' : '4 2'} rx={4}
-              style={{ cursor: 'move' }}
-              onMouseDown={e => startInteract(e, field.id, 'field', 'drag')} />
+              style={{ cursor: 'pointer' }}
+              onClick={e => { e.stopPropagation(); setSelectedId(field.id); }} />
 
             {field.field_type === 'text' && (
               <foreignObject x={sx + 4} y={sy + 2} width={sw - 8} height={sh - 4}>
                 <input xmlns="http://www.w3.org/1999/xhtml"
+                  ref={el => {
+                    if (el && autoFocusIdRef.current === field.id) {
+                      el.focus();
+                      autoFocusIdRef.current = null;
+                    }
+                  }}
                   style={{ width: '100%', height: '100%', border: 'none', background: 'transparent',
                     fontSize: Math.min(14, sh * 0.55), outline: 'none', cursor: 'text' }}
                   value={val}
@@ -241,7 +285,11 @@ export default function EditLayer({
             )}
 
             {field.field_type === 'checkbox' && (
-              <g onClick={e => { e.stopPropagation(); handleFieldValue(field.id, val === 'true' ? 'false' : 'true'); }} style={{ cursor: 'pointer' }}>
+              <g onClick={e => {
+                e.stopPropagation();
+                setSelectedId(field.id);
+                if (!readOnly) handleFieldValue(field.id, val === 'true' ? 'false' : 'true');
+              }} style={{ cursor: 'pointer' }}>
                 <rect x={sx + 2} y={sy + 2} width={sw - 4} height={sh - 4} fill="white" stroke={color} strokeWidth={1} rx={3} />
                 {val === 'true' && (
                   <text x={sx + sw / 2} y={sy + sh * 0.75} textAnchor="middle" fontSize={sh * 0.7} fill={color}>✓</text>
@@ -249,7 +297,8 @@ export default function EditLayer({
               </g>
             )}
 
-            {isSelected && <>
+            {isSelected && !readOnly && <>
+              <DragHandle sx={sx} sy={sy} sw={sw} id={field.id} type="field" color={color} />
               <g onClick={e => { e.stopPropagation(); deleteField(field.id); }} style={{ cursor: 'pointer' }}>
                 <circle cx={sx + sw} cy={sy} r={9} fill="#ef4444" />
                 <text x={sx + sw} y={sy + 4} textAnchor="middle" fontSize={12} fill="white" style={{ pointerEvents: 'none' }}>×</text>
@@ -270,19 +319,70 @@ export default function EditLayer({
           <g key={sig.id}>
             <image href={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(sig.svg_data)}`}
               x={sx} y={sy} width={sw} height={sh}
-              style={{ opacity: 0.92, cursor: 'move', pointerEvents: 'all' }}
-              onMouseDown={e => startInteract(e, sig.id, 'sig', 'drag')} />
+              style={{ opacity: 0.92, pointerEvents: 'all' }}
+              onClick={e => { e.stopPropagation(); setSelectedId(sig.id); }} />
             <rect x={sx} y={sy} width={sw} height={sh}
               fill="none" stroke={isSelected ? '#8b5cf6' : 'transparent'} strokeWidth={2} rx={2}
-              style={{ cursor: 'move', pointerEvents: 'all' }}
-              onMouseDown={e => startInteract(e, sig.id, 'sig', 'drag')} />
-            {isSelected && <>
+              style={{ pointerEvents: 'all' }}
+              onClick={e => { e.stopPropagation(); setSelectedId(sig.id); }} />
+            {isSelected && !readOnly && <>
+              <DragHandle sx={sx} sy={sy} sw={sw} id={sig.id} type="sig" color="#8b5cf6" />
               <g onClick={e => { e.stopPropagation(); deleteSigPlacement(sig.id); }} style={{ cursor: 'pointer' }}>
                 <circle cx={sx + sw} cy={sy} r={9} fill="#ef4444" />
                 <text x={sx + sw} y={sy + 4} textAnchor="middle" fontSize={12} fill="white" style={{ pointerEvents: 'none' }}>×</text>
               </g>
               <ResizeHandle sx={sx + sw} sy={sy + sh} id={sig.id} type="sig" />
             </>}
+          </g>
+        );
+      })}
+
+      {pageViewerSigs.map(sig => {
+        const sx = toScreenX(sig.x);
+        const sy = toScreenY(sig.y, sig.height);
+        const sw = toScreenX(sig.width);
+        const sh = toScreenX(sig.height);
+        return (
+          <g key={`viewer-sig-${sig.id}`} style={{ pointerEvents: 'none' }}>
+            <image href={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(sig.svg_data)}`}
+              x={sx} y={sy} width={sw} height={sh} style={{ opacity: 0.5 }} />
+            <rect x={sx} y={sy} width={sw} height={sh}
+              fill="none" stroke="#8b5cf6" strokeWidth={1.5} strokeDasharray="4 2" rx={2} />
+          </g>
+        );
+      })}
+
+      {pageViewerFields.map(field => {
+        const val = getViewerValue(field.id);
+        const color = FIELD_COLORS[field.field_type] || '#3b82f6';
+        const sx = toScreenX(field.x);
+        const sy = toScreenY(field.y, field.height);
+        const sw = toScreenX(field.width);
+        const sh = toScreenX(field.height);
+        return (
+          <g key={`viewer-field-${field.id}`} style={{ pointerEvents: 'none', opacity: 0.6 }}>
+            <rect x={sx} y={sy} width={sw} height={sh}
+              fill={`${color}18`} stroke={color} strokeWidth={1}
+              strokeDasharray="4 2" rx={4} />
+            {field.field_type === 'text' && val && (
+              <text x={sx + 4} y={sy + sh * 0.72}
+                fontSize={Math.min(14, sh * 0.55)} fill="#1a1a1a"
+                style={{ dominantBaseline: 'auto' }}>
+                {val}
+              </text>
+            )}
+            {field.field_type === 'checkbox' && val === 'true' && (
+              <>
+                <rect x={sx + 2} y={sy + 2} width={sw - 4} height={sh - 4}
+                  fill="white" stroke={color} strokeWidth={1} rx={3} />
+                <text x={sx + sw / 2} y={sy + sh * 0.75}
+                  textAnchor="middle" fontSize={sh * 0.7} fill={color}>✓</text>
+              </>
+            )}
+            {field.field_type === 'checkbox' && val !== 'true' && (
+              <rect x={sx + 2} y={sy + 2} width={sw - 4} height={sh - 4}
+                fill="white" stroke={color} strokeWidth={1} rx={3} />
+            )}
           </g>
         );
       })}

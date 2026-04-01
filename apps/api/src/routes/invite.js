@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { query } from '../db/pool.js';
 import { authMiddleware } from '../middleware/auth.js';
 import { logAudit } from '../services/audit.js';
+import { notifyUser } from '../services/sse.js';
 
 const router = Router();
 
@@ -54,12 +55,26 @@ router.post('/:token/accept', authMiddleware, async (req, res) => {
 
     await query(
       `UPDATE document_shares
-       SET invite_status='accepted', responded_at=NOW(), invite_token=NULL
+       SET invite_status='accepted', responded_at=NOW(), invite_token=NULL,
+           invitee_id=COALESCE(invitee_id, $2)
        WHERE id=$1`,
-      [share.id]
+      [share.id, req.user.id]
     );
 
     await logAudit({ docId: share.document_id, userId: req.user.id, action: 'share_accepted', req });
+
+    // 사용자에게 실시간 알림 전송 (문서 목록 갱신용)
+    notifyUser(req.user.id, {
+      type: 'document_shared',
+      document_id: share.document_id,
+    });
+
+    // 문서 소유자에게 실시간 알림 전송 (ShareModal 갱신용)
+    notifyUser(share.owner_id, {
+      type: 'share_status_changed',
+      document_id: share.document_id,
+    });
+
     res.json({ document_id: share.document_id });
   } catch (err) {
     res.status(500).json({ error: err.message });

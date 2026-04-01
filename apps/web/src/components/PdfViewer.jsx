@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 
+import pdfjsWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
+
 let pdfjsLib = null;
 
 async function getPdfjs() {
   if (pdfjsLib) return pdfjsLib;
   pdfjsLib = await import('pdfjs-dist');
-  pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
+  pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorkerUrl;
   return pdfjsLib;
 }
 

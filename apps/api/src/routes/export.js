@@ -8,10 +8,11 @@ import { buildCombinedPdf, buildIndividualPdf } from '../services/pdfMerge.js';
 import { readPdf } from '../services/storage.js';
 import { logAudit } from '../services/audit.js';
 
-const router = Router();
+const router = Router({ mergeParams: true });
 router.use(authMiddleware);
 
-router.post('/:docId/export', requireDocAccess, async (req, res) => {
+// POST / — 문서 내보내기 (individual/combined)
+router.post('/', requireDocAccess, async (req, res) => {
   const { docId } = req.params;
   const userId = req.user.id;
   const { mode } = req.body;
@@ -68,18 +69,27 @@ router.post('/:docId/export', requireDocAccess, async (req, res) => {
   }
 });
 
-router.post('/:docId/export/bulk-individual', async (req, res) => {
+// POST /bulk-individual — 개별 일괄 내보내기 (ZIP)
+router.post('/bulk-individual', async (req, res) => {
   const { docId } = req.params;
   const userId = req.user.id;
 
   try {
     const { rows: docs } = await query(
-      `SELECT d.pdf_path, d.name, u.email AS owner_email
+      `SELECT d.pdf_path, d.pdf_hash, d.name, u.email AS owner_email
        FROM documents d JOIN users u ON u.id = d.owner_id WHERE d.id=$1`,
       [docId]
     );
     if (!docs.length) return res.status(404).json({ error: '문서를 찾을 수 없습니다' });
     if (docs[0].owner_email !== req.user.email) return res.status(403).json({ error: '문서 소유자만 가능합니다' });
+
+    if (docs[0].pdf_hash) {
+      const originalBytes = await readPdf(docs[0].pdf_path);
+      const currentHash = createHash('sha256').update(originalBytes).digest('hex');
+      if (currentHash !== docs[0].pdf_hash) {
+        return res.status(500).json({ error: '문서 무결성 검증 실패: 원본 파일이 변조되었습니다' });
+      }
+    }
 
     const { rows: shares } = await query(
       `SELECT invitee_email, COALESCE(u.name, invitee_email) AS user_name
@@ -104,6 +114,7 @@ router.post('/:docId/export/bulk-individual', async (req, res) => {
     }
 
     await archive.finalize();
+    await logAudit({ docId, userId, action: 'document_exported', meta: { mode: 'bulk-individual', zipName }, req });
   } catch (err) {
     console.error('Bulk export error:', err);
     if (!res.headersSent) res.status(500).json({ error: err.message });

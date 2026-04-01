@@ -1,11 +1,15 @@
 import { useEffect, useState } from 'react';
 import { GoogleOAuthProvider } from '@react-oauth/google';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useAuthStore } from './stores/authStore';
+import { SSEProvider } from './contexts/SSEContext';
 import AuthPage from './components/AuthPage';
 import Dashboard from './components/Dashboard';
 import EditorPage from './components/EditorPage';
 import InvitePage from './components/InvitePage';
 import api from './services/api';
+
+const queryClient = new QueryClient();
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
 
@@ -22,7 +26,7 @@ function parsePath() {
 
 export default function App() {
   const { user, loading, init } = useAuthStore();
-  const [route] = useState(parsePath);
+  const [route, setRoute] = useState(parsePath);
   const [currentDocId, setCurrentDocId] = useState(route.type === 'doc' ? route.docId : null);
   const [inviteEmail, setInviteEmail] = useState(null);
 
@@ -47,6 +51,7 @@ export default function App() {
 
   const handleInviteAccepted = (docId) => {
     window.history.replaceState({}, '', `/documents/${docId}`);
+    setRoute({ type: 'doc', docId });
     setCurrentDocId(docId);
   };
 
@@ -71,13 +76,17 @@ export default function App() {
 
   return (
     <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
-      {!user ? (
-        <AuthPage />
-      ) : currentDocId ? (
-        <EditorPage docId={currentDocId} onBack={closeDoc} />
-      ) : (
-        <Dashboard onOpenDoc={openDoc} />
-      )}
+      <QueryClientProvider client={queryClient}>
+        <SSEProvider>
+          {!user ? (
+            <AuthPage />
+          ) : currentDocId ? (
+            <EditorPage docId={currentDocId} onBack={closeDoc} />
+          ) : (
+            <Dashboard onOpenDoc={openDoc} />
+          )}
+        </SSEProvider>
+      </QueryClientProvider>
     </GoogleOAuthProvider>
   );
 }

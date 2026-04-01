@@ -17,8 +17,14 @@ export default function SignatureModal({ onClose, onSaved, editing = null }) {
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
+    const dpr = window.devicePixelRatio || 1;
+    const logicalW = 470, logicalH = 160;
+    canvas.width = logicalW * dpr;
+    canvas.height = logicalH * dpr;
+    canvas.style.width = `${logicalW}px`;
+    canvas.style.height = `${logicalH}px`;
     const ctx = canvas.getContext('2d');
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.scale(dpr, dpr);
     ctx.strokeStyle = '#1a1a1a';
     ctx.lineWidth = 2.5;
     ctx.lineJoin = 'round';
@@ -38,7 +44,8 @@ export default function SignatureModal({ onClose, onSaved, editing = null }) {
   };
 
   const redraw = (ctx, canvas) => {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    const dpr = window.devicePixelRatio || 1;
+    ctx.clearRect(0, 0, canvas.width / dpr, canvas.height / dpr);
     ctx.strokeStyle = '#1a1a1a';
     ctx.lineWidth = 2.5;
     ctx.lineJoin = 'round';
@@ -76,8 +83,9 @@ export default function SignatureModal({ onClose, onSaved, editing = null }) {
 
   const clearCanvas = () => {
     const canvas = canvasRef.current;
+    const dpr = window.devicePixelRatio || 1;
     const ctx = canvas.getContext('2d');
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.clearRect(0, 0, canvas.width / dpr, canvas.height / dpr);
     strokes.current = [];
   };
 
@@ -117,8 +125,7 @@ export default function SignatureModal({ onClose, onSaved, editing = null }) {
 
     if (tab === 'draw') {
       if (!strokes.current.length) return alert('서명을 그려주세요');
-      const canvas = canvasRef.current;
-      svgData = strokesToSvgPath(strokes.current, canvas.width, canvas.height);
+      svgData = strokesToSvgPath(strokes.current, 470, 160);
       method = 'draw';
     } else {
       if (!imgSvg) return alert('이미지를 업로드해주세요');
@@ -179,7 +186,7 @@ export default function SignatureModal({ onClose, onSaved, editing = null }) {
         {tab === 'draw' ? (
           <div>
             <div style={{ border: '1.5px solid #d1d5db', borderRadius: 8, background: '#fafafa', marginBottom: 8, cursor: 'crosshair', touchAction: 'none' }}>
-              <canvas ref={canvasRef} width={470} height={160}
+              <canvas ref={canvasRef}
                 style={{ display: 'block', width: '100%', height: 160 }}
                 onMouseDown={startDraw} onMouseMove={draw} onMouseUp={endDraw} onMouseLeave={endDraw}
                 onTouchStart={startDraw} onTouchMove={draw} onTouchEnd={endDraw}
