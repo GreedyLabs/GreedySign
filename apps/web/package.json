@@ -14,9 +14,7 @@
     "zustand": "^5.0.12",
     "@react-oauth/google": "^0.13.4",
     "axios": "^1.14.0",
-    "@tanstack/react-query": "^5.80.7",
-    "@greedylabs/greedysign-types": "workspace:*",
-    "@greedylabs/greedysign-api-client": "workspace:*"
+    "@tanstack/react-query": "^5.80.7"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^6.0.1",

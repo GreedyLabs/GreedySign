@@ -70,6 +70,6 @@ pnpm --filter api dev
 pnpm --filter web dev
 ```
 
-프론트엔드는 `http://localhost:5173`, 백엔드는 `http://localhost:3000`으로 실행됩니다.
+프론트엔드는 `http://localhost:5173`, 백엔드는 `http://localhost:3001`로 실행됩니다.
 
-> 로컬 개발 시 Vite의 `vite.config.js`에서 `/api` 프록시를 `http://localhost:3000`으로 설정해야 합니다.
+> 로컬 개발 시 Vite의 `vite.config.js`에서 `/api` 프록시를 `http://localhost:3001`으로 설정해야 합니다.
