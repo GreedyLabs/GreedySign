@@ -7,14 +7,10 @@ RUN corepack enable && corepack prepare pnpm@latest --activate
 COPY pnpm-workspace.yaml ./
 COPY package.json ./
 
-COPY packages/types/package.json ./packages/types/
-COPY packages/api-client/package.json ./packages/api-client/
 COPY apps/web/package.json ./apps/web/
 
 RUN pnpm install --no-frozen-lockfile
 
-COPY packages/types ./packages/types
-COPY packages/api-client ./packages/api-client
 COPY apps/web ./apps/web
 
 # API 서버 주소를 빌드 시점에 주입 (nginx가 프록시하므로 /api 그대로 사용)

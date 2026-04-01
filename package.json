@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "pnpm --parallel --filter './apps/*' dev",
-    "build": "pnpm --filter '@greedylabs/greedysign-types' build && pnpm --filter '@greedylabs/greedysign-api-client' build && pnpm --filter './apps/*' build",
+    "build": "pnpm --filter './apps/*' build",
     "db:init": "pnpm --filter '@greedylabs/greedysign-api' db:init"
   }
 }
