@@ -38,6 +38,12 @@ services:
       - "3001"
     volumes:
       - uploads:/app/uploads
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3001/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
 
   web:
     build:
@@ -47,7 +53,8 @@ services:
         VITE_GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
     restart: unless-stopped
     depends_on:
-      - api
+      api:
+        condition: service_healthy
     ports:
       - "80:80"
 

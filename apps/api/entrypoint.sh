@@ -2,7 +2,7 @@
 set -e
 
 echo "Running DB init..."
-node src/db/init.js
+node dist/db/init.js
 
 echo "Starting server..."
-exec node src/index.js
+exec node dist/index.js

@@ -14,62 +14,77 @@ export const API_ENDPOINTS = {
   // 문서
   documents: {
     list: '/documents',
-    get: (id) => `/documents/${id}`,
     upload: '/documents/upload',
+    get: (id) => `/documents/${id}`,
     delete: (id) => `/documents/${id}`,
-    pdf: (id) => `/documents/${id}/pdf`,
+    send: (id) => `/documents/${id}/send`,
+    void: (id) => `/documents/${id}/void`,
   },
 
-  // 문서 공유
-  shares: {
-    list: (docId) => `/documents/${docId}/shares`,
-    create: (docId) => `/documents/${docId}/shares`,
-    delete: (docId, shareId) => `/documents/${docId}/shares/${shareId}`,
-    accept: (docId) => `/documents/${docId}/shares/accept`,
-    decline: (docId) => `/documents/${docId}/shares/decline`,
-  },
-
-  // 서명 상태
-  signing: {
-    updateStatus: (docId) => `/documents/${docId}/signing/status`,
-  },
-
-  // 내보내기
-  export: {
-    individual: (docId) => `/documents/${docId}/export`,
-    combined: (docId) => `/documents/${docId}/export`,
-    bulkIndividual: (docId) => `/documents/${docId}/export/bulk-individual`,
+  // 참여자 (구 shares → participants)
+  participants: {
+    list: (docId) => `/documents/${docId}/participants`,
+    add: (docId) => `/documents/${docId}/participants`,
+    update: (docId, id) => `/documents/${docId}/participants/${id}`,
+    remove: (docId, id) => `/documents/${docId}/participants/${id}`,
+    accept: (docId) => `/documents/${docId}/participants/me/accept`,
+    decline: (docId) => `/documents/${docId}/participants/me/decline`,
   },
 
   // 필드
   fields: {
+    list: (docId) => `/documents/${docId}/fields`,
     create: (docId) => `/documents/${docId}/fields`,
-    update: (id) => `/fields/${id}`,
-    delete: (id) => `/fields/${id}`,
-    updateValue: (id) => `/fields/${id}/value`,
+    update: (docId, fieldId) => `/documents/${docId}/fields/${fieldId}`,
+    remove: (docId, fieldId) => `/documents/${docId}/fields/${fieldId}`,
+    response: (docId, fieldId) => `/documents/${docId}/fields/${fieldId}/response`,
   },
 
-  // 서명
+  // 서명 제출 / 거부
+  signing: {
+    submit: (docId) => `/documents/${docId}/signing/submit`,
+    decline: (docId) => `/documents/${docId}/signing/decline`,
+  },
+
+  // 내보내기
+  export: {
+    download: (docId) => `/documents/${docId}/export`,
+    bulk: (docId) => `/documents/${docId}/export/bulk-individual`,
+  },
+
+  // 서명 라이브러리 (user_signatures)
   signatures: {
     list: '/signatures',
     create: '/signatures',
     update: (id) => `/signatures/${id}`,
     delete: (id) => `/signatures/${id}`,
-    placements: (docId) => `/signatures/documents/${docId}/placements`,
-    getPlacementsByEmail: (docId, email) => `/signatures/documents/${docId}/placements/${encodeURIComponent(email)}`,
-    updatePlacement: (id) => `/signatures/placements/${id}`,
-    deletePlacement: (id) => `/signatures/placements/${id}`,
   },
 
-  // 초대
+  // 초대 링크 (이메일 → 수락)
   invite: {
     get: (token) => `/invite/${token}`,
     accept: (token) => `/invite/${token}/accept`,
   },
 
-  // SSE 이벤트
+  // 알림
+  notifications: {
+    list: '/notifications',
+    readAll: '/notifications/read',
+    readOne: (id) => `/notifications/${id}/read`,
+  },
+
+  // 활동 로그
+  activity: '/activity',
+
+  // 완료 인증서
+  certificate: (docId) => `/documents/${docId}/certificate`,
+
+  // SSE 이벤트 스트림
   events: {
     user: (token) => `/events/user?token=${encodeURIComponent(token)}`,
     document: (docId, token) => `/events/documents/${docId}?token=${encodeURIComponent(token)}`,
   },
+
+  // 통합 검색
+  search: (q) => `/search?q=${encodeURIComponent(q)}`,
 };

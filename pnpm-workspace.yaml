@@ -1,2 +1,7 @@
 packages:
   - 'apps/*'
+
+# esbuild, sharp는 native 바이너리 빌드 스크립트 실행 허용
+onlyBuiltDependencies:
+  - esbuild
+  - sharp

@@ -31,7 +31,9 @@ export default function PdfViewer({ pdfUrl, currentPage, scale = 1.4, onPageRend
       }
     }
     load();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [pdfUrl, token]);
 
   useEffect(() => {
@@ -77,8 +79,15 @@ export default function PdfViewer({ pdfUrl, currentPage, scale = 1.4, onPageRend
     }
 
     render();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [pdfDoc, currentPage, scale]);
 
-  return <canvas ref={canvasRef} style={{ display: 'block', boxShadow: '0 2px 12px rgba(0,0,0,0.15)' }} />;
+  return (
+    <canvas
+      ref={canvasRef}
+      style={{ display: 'block', boxShadow: '0 2px 12px rgba(0,0,0,0.15)' }}
+    />
+  );
 }

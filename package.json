@@ -5,6 +5,11 @@
   "scripts": {
     "dev": "pnpm --parallel --filter './apps/*' dev",
     "build": "pnpm --filter './apps/*' build",
-    "db:init": "pnpm --filter '@greedylabs/greedysign-api' db:init"
+    "db:init": "pnpm --filter '@greedylabs/greedysign-api' db:init",
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,css,json}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,css,json}\""
+  },
+  "devDependencies": {
+    "prettier": "^3.8.3"
   }
 }

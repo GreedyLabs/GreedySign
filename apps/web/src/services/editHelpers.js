@@ -56,7 +56,7 @@ export class CoordinateConverter {
    * @param {number} objHeight - 객체 높이 (PDF 단위)
    */
   toPdfY(screenY, objHeight) {
-    return this.pdfHeight - (screenY / this.scale) - objHeight;
+    return this.pdfHeight - screenY / this.scale - objHeight;
   }
 
   /**

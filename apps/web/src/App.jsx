@@ -1,92 +1,103 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { GoogleOAuthProvider } from '@react-oauth/google';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useAuthStore } from './stores/authStore';
 import { SSEProvider } from './contexts/SSEContext';
+import { RouterProvider, useLocation, Navigate } from './lib/router';
+import AppShell from './components/AppShell';
 import AuthPage from './components/AuthPage';
-import Dashboard from './components/Dashboard';
-import EditorPage from './components/EditorPage';
 import InvitePage from './components/InvitePage';
-import api from './services/api';
+import EditorPage from './components/EditorPage';
+import CompletePage from './pages/CompletePage';
+import DocsPage from './pages/DocsPage';
+import UploadPage from './pages/UploadPage';
+import ActivityPage from './pages/ActivityPage';
+import SettingsPage from './pages/SettingsPage';
+import NotificationsPage from './pages/NotificationsPage';
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: { queries: { retry: 1 } },
+});
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
 
-const UUID_RE = /^[a-f0-9-]{36}$/;
-
-function parsePath() {
-  const { pathname } = window.location;
-  const inviteMatch = pathname.match(/^\/invite\/([a-f0-9-]{36})$/);
-  if (inviteMatch) return { type: 'invite', token: inviteMatch[1] };
-  const docMatch = pathname.match(/^\/documents\/([a-f0-9-]{36})$/);
-  if (docMatch && UUID_RE.test(docMatch[1])) return { type: 'doc', docId: docMatch[1] };
-  return { type: 'home' };
-}
-
-export default function App() {
+// ─── Route renderer ───────────────────────────────────────
+// Reads current pathname and renders the matching component.
+// AppShell is a layout wrapper for all authenticated shell routes.
+function AppRoutes() {
   const { user, loading, init } = useAuthStore();
-  const [route, setRoute] = useState(parsePath);
-  const [currentDocId, setCurrentDocId] = useState(route.type === 'doc' ? route.docId : null);
-  const [inviteEmail, setInviteEmail] = useState(null);
-
-  useEffect(() => { init(); }, []);
+  const { pathname } = useLocation();
 
   useEffect(() => {
-    if (route.type !== 'invite') return;
-    api.get(`/invite/${route.token}`)
-      .then(({ data }) => setInviteEmail(data.invitee_email))
-      .catch(() => {});
-  }, []);
+    init();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const openDoc = (docId) => {
-    window.history.pushState({}, '', `/documents/${docId}`);
-    setCurrentDocId(docId);
-  };
-
-  const closeDoc = () => {
-    window.history.pushState({}, '', '/');
-    setCurrentDocId(null);
-  };
-
-  const handleInviteAccepted = (docId) => {
-    window.history.replaceState({}, '', `/documents/${docId}`);
-    setRoute({ type: 'doc', docId });
-    setCurrentDocId(docId);
-  };
-
-  if (loading) return (
-    <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f5f5f5' }}>
-      <p style={{ color: '#6b7280', fontSize: 15 }}>로딩 중...</p>
-    </div>
-  );
-
-  if (route.type === 'invite') {
-    if (!user) return (
-      <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
-        <AuthPage inviteEmail={inviteEmail} />
-      </GoogleOAuthProvider>
+  if (loading)
+    return (
+      <div className="gs-loading">
+        <div className="gs-spinner" />
+      </div>
     );
+
+  // ── Invite (accessible without being logged in) ──────────
+  if (pathname.startsWith('/invite/')) {
+    if (!user)
+      return (
+        <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
+          <AuthPage />
+        </GoogleOAuthProvider>
+      );
+    return <InvitePage />;
+  }
+
+  // ── Not authenticated ─────────────────────────────────────
+  if (!user) {
+    // 현재 경로가 의미있는 경로면 로그인 후 복귀할 수 있도록 저장
+    if (pathname !== '/' && !pathname.startsWith('/invite/')) {
+      sessionStorage.setItem('auth_redirect', pathname);
+    }
     return (
       <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
-        <InvitePage token={route.token} onAccepted={handleInviteAccepted} />
+        <AuthPage />
       </GoogleOAuthProvider>
     );
   }
 
+  // ── Signing complete certificate (full-screen, no shell) ──
+  if (/^\/docs\/[a-f0-9-]{36}\/complete$/.test(pathname)) {
+    return <CompletePage />;
+  }
+
+  // ── Editor (full-screen, no shell) ────────────────────────
+  if (/^\/docs\/[a-f0-9-]{36}$/.test(pathname)) {
+    return <EditorPage />;
+  }
+
+  // ── Shell routes ──────────────────────────────────────────
   return (
-    <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
+    <AppShell>
+      {pathname === '/docs' && <DocsPage mode="mine" />}
+      {pathname === '/shared' && <DocsPage mode="shared" />}
+      {pathname === '/upload' && <UploadPage />}
+      {pathname === '/activity' && <ActivityPage />}
+      {pathname === '/notifications' && <NotificationsPage />}
+      {pathname.startsWith('/settings') && <SettingsPage />}
+      {/* Default redirect */}
+      {!['/docs', '/shared', '/upload', '/activity', '/notifications'].includes(pathname) &&
+        !pathname.startsWith('/settings') && <Navigate to="/docs" />}
+    </AppShell>
+  );
+}
+
+// ─── App root ─────────────────────────────────────────────
+export default function App() {
+  return (
+    <RouterProvider>
       <QueryClientProvider client={queryClient}>
         <SSEProvider>
-          {!user ? (
-            <AuthPage />
-          ) : currentDocId ? (
-            <EditorPage docId={currentDocId} onBack={closeDoc} />
-          ) : (
-            <Dashboard onOpenDoc={openDoc} />
-          )}
+          <AppRoutes />
         </SSEProvider>
       </QueryClientProvider>
-    </GoogleOAuthProvider>
+    </RouterProvider>
   );
 }

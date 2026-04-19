@@ -19,7 +19,12 @@ COPY apps/api ./apps/api
 
 WORKDIR /app/apps/api
 
-COPY apps/api/entrypoint.sh ./entrypoint.sh
+# 마이그레이션 SQL 생성 (DB 연결 불필요, 스키마에서 SQL만 추출)
+RUN DATABASE_URL=postgresql://dummy:dummy@localhost/dummy pnpm run db:generate
+
+# TypeScript 컴파일
+RUN pnpm run build
+
 RUN chmod +x entrypoint.sh
 
 EXPOSE 3001
