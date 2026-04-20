@@ -3,11 +3,13 @@
  *
  * 사용법:
  *   pnpm db:init        → 마이그레이션 적용 (초기 배포 / 스키마 변경 시)
- *   pnpm db:generate    → schema.ts 변경 후 SQL 마이그레이션 파일 생성
+ *   pnpm db:generate    → schema.ts 변경 후 SQL 마이그레이션 파일 생성 (개발자 로컬 전용)
  *   pnpm db:push        → 개발 중 마이그레이션 파일 없이 직접 반영 (dev only)
  *
- * 마이그레이션 파일은 idempotent하게 작성되어 있어 (CREATE ... IF NOT EXISTS
- * 등) 기존 DB에 재적용해도 안전합니다.
+ * 마이그레이션은 fresh-install 전용 — drizzle-kit 기본 스타일의 순수
+ * CREATE TABLE / ALTER TABLE / CREATE INDEX 로만 구성되어 있다.
+ * 스키마를 breaking 하게 바꿨다면 `docker compose down -v` 로 볼륨을 지운 뒤
+ * 다시 기동할 것. 기존 DB 위에 덮어쓰지 않는다.
  */
 import 'dotenv/config';
 import pg from 'pg';

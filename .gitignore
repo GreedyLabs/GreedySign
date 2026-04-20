@@ -8,12 +8,5 @@ uploads/
 .tanstack/
 _tmp_*
 
-# NOTE: apps/web/src/routeTree.gen.ts 는 의도적으로 git 에 커밋한다.
-# TanStack Router 의 Vite 플러그인이 dev/build 시 재생성하지만, 커밋해
-# 두면 (1) tsc 가 routeTree.gen.ts 에 의존하는 라우트 타입을 체크할 때
-# vite 이전에 파일이 존재함을 보장하고 (Docker/CI 깨끗한 환경에서도
-# 타입체크가 fast-fail), (2) 제너레이터 버전 드리프트로 인한 비결정적
-# 빌드를 피할 수 있다. 라우트를 추가/이동하면 이 파일이 diff 에 포함된다.
-
 # 향후 정리
 docs/

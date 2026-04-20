@@ -20,12 +20,10 @@ COPY packages/shared ./packages/shared
 RUN pnpm --filter @greedylabs/greedysign-shared build
 
 # API 소스 + 빌드
+# drizzle/*.sql 은 repo 에 커밋되어 함께 복사된다 — build 시 generate 하지 않는다.
 COPY apps/api ./apps/api
 
 WORKDIR /app/apps/api
-
-# 마이그레이션 SQL 생성 (DB 연결 불필요, 스키마에서 SQL만 추출)
-RUN DATABASE_URL=postgresql://dummy:dummy@localhost/dummy pnpm run db:generate
 
 # TypeScript 컴파일
 RUN pnpm run build
