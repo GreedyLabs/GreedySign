@@ -133,7 +133,8 @@ export async function sendCompletionEmail({
     to: toEmail,
     subject: `[GreedySign] "${docName}" 문서의 모든 서명이 완료되었습니다`,
     html: layout({
-      title: '🎉 서명 완료',
+      // 이메일 클라이언트마다 이모지(🎉) 렌더링이 제각각이라 텍스트만 사용한다.
+      title: '서명 완료',
       preheader: `"${docName}" 문서에 모든 서명이 수집되어 최종 확정되었습니다.`,
       body: `
         <p style="margin:0 0 16px;color:#4b5563;line-height:1.6;">
@@ -142,7 +143,7 @@ export async function sendCompletionEmail({
         </p>
         <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:16px;margin-bottom:24px;">
           <p style="margin:0;font-size:13px;color:#15803d;line-height:1.6;">
-            ✅ 서명이 완료된 PDF는 SHA-256 해시로 무결성이 보장됩니다.<br>
+            <strong>[확정]</strong> 서명이 완료된 PDF는 SHA-256 해시로 무결성이 보장됩니다.<br>
             문서는 더 이상 수정할 수 없으며, 언제든지 아래 링크에서 열람·다운로드할 수 있습니다.
           </p>
         </div>

@@ -4,3 +4,12 @@
 uploads/
 
 .DS_Store
+.pnpm-store/
+.tanstack/
+_tmp_*
+
+# TanStack Router 가 vite 빌드 시 src/routes/ 트리를 스캔해 자동 생성.
+apps/web/src/routeTree.gen.ts
+
+# 향후 정리
+docs/

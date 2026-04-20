@@ -5,16 +5,21 @@ WORKDIR /app
 # pnpm 설치
 RUN corepack enable && corepack prepare pnpm@latest --activate
 
-# 루트 workspace 설정 파일 복사
+# workspace 루트 메타
 COPY pnpm-workspace.yaml ./
 COPY package.json ./
 
-# 패키지 파일 복사 (의존성 캐시 레이어 활용)
+# workspace 패키지 manifest 는 install 전에 전부 있어야 workspace:* 해석이 된다
 COPY apps/api/package.json ./apps/api/
+COPY packages/shared/package.json ./packages/shared/
 
 RUN pnpm install --no-frozen-lockfile
 
-# 소스 복사
+# shared 스키마 패키지 먼저 빌드 (dist 가 있어야 api 의 import 가 해석된다)
+COPY packages/shared ./packages/shared
+RUN pnpm --filter @greedylabs/greedysign-shared build
+
+# API 소스 + 빌드
 COPY apps/api ./apps/api
 
 WORKDIR /app/apps/api

@@ -99,25 +99,29 @@ export async function buildCombinedPdf(
   const pdfDoc = await PDFDocument.load(pdfBytes);
   const pages = pdfDoc.getPages();
 
-  const result =
+  // 주의: drizzle 의 sql`` 안에서 JS 배열은 "$1, $2, ... 의 튜플"로 펼쳐지므로
+  // `ANY(${ids}::uuid[])` 가 `ANY(($2,$3,...)::uuid[])` 가 돼 PG 가 record →
+  // uuid[] 로 캐스팅하다 실패한다(`certificate.ts` 와 같은 함정).
+  // → IN + sql.join 으로 명시적인 파라미터 리스트를 만들어 우회한다.
+  // 이 버그는 freezeDocument 의 catch 에 가려서 "status=completed 인데
+  // signed_pdf_path/hash 만 null" 인 좀비 상태를 만들었다.
+  const participantFilter =
     participantIds && participantIds.length > 0
-      ? await db.execute(sql`
-        SELECT
-          fr.text_value, fr.checked, fr.svg_data, fr.date_value,
-          ff.field_type, ff.x, ff.y, ff.width, ff.height, ff.page_number
-        FROM field_responses fr
-        JOIN form_fields ff ON ff.id = fr.field_id
-        WHERE ff.document_id = ${docId}::uuid
-          AND fr.participant_id = ANY(${participantIds}::uuid[])
-      `)
-      : await db.execute(sql`
-        SELECT
-          fr.text_value, fr.checked, fr.svg_data, fr.date_value,
-          ff.field_type, ff.x, ff.y, ff.width, ff.height, ff.page_number
-        FROM field_responses fr
-        JOIN form_fields ff ON ff.id = fr.field_id
-        WHERE ff.document_id = ${docId}::uuid
-      `);
+      ? sql`AND fr.participant_id IN (${sql.join(
+          participantIds.map((id) => sql`${id}::uuid`),
+          sql`, `
+        )})`
+      : sql``;
+
+  const result = await db.execute(sql`
+    SELECT
+      fr.text_value, fr.checked, fr.svg_data, fr.date_value,
+      ff.field_type, ff.x, ff.y, ff.width, ff.height, ff.page_number
+    FROM field_responses fr
+    JOIN form_fields ff ON ff.id = fr.field_id
+    WHERE ff.document_id = ${docId}::uuid
+      ${participantFilter}
+  `);
 
   for (const response of result.rows as unknown as FieldResponse[]) {
     const pageIndex = (response.page_number || 1) - 1;

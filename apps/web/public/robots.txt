@@ -1,0 +1,21 @@
+# GreedySign — 검색엔진 크롤링 규칙
+# 공개 라우트(/, /guide)만 인덱싱. 인증 필요 라우트와 API 는 전부 차단.
+
+User-agent: *
+Allow: /$
+Allow: /guide
+Allow: /guide/
+
+Disallow: /login
+Disallow: /docs
+Disallow: /templates
+Disallow: /campaigns
+Disallow: /settings
+Disallow: /activity
+Disallow: /notifications
+Disallow: /upload
+Disallow: /shared
+Disallow: /invite
+Disallow: /api
+
+Sitemap: https://greedysign.com/sitemap.xml

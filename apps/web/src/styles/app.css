@@ -862,13 +862,23 @@
   border-bottom: 1px solid var(--color-border);
   background: var(--color-bg);
 }
+/* 좌/우 사이드바는 PDF 가독성을 가리지 않도록 반투명(glass) 처리한다.
+   - background-color 알파를 낮춰 캔버스가 살짝 비쳐 보이게.
+   - backdrop-filter 로 배경 점 그리드를 부드럽게 흐려 콘텐츠 대비는 유지.
+   - 하드 보더 대신 얇은 그림자로 "플로팅" 느낌을 준다.
+   backdrop-filter 를 지원하지 않는 환경에서는 일반 bg 로 자연 fallback. */
 .gs-ed-left {
   grid-area: edleft;
-  border-right: 1px solid var(--color-border);
-  background: var(--color-bg);
+  background: color-mix(in srgb, var(--color-bg) 78%, transparent);
+  backdrop-filter: saturate(140%) blur(12px);
+  -webkit-backdrop-filter: saturate(140%) blur(12px);
+  box-shadow: 1px 0 0 var(--color-border-subtle), 4px 0 16px -8px rgba(17, 24, 39, 0.08);
   overflow: auto;
   padding: 16px;
-  transition: padding 0.18s ease;
+  transition:
+    padding 0.18s ease,
+    background 0.18s ease;
+  z-index: 1;
 }
 .gs-ed-left.is-closed {
   padding: 8px 0;
@@ -876,12 +886,22 @@
 }
 .gs-ed-right {
   grid-area: edright;
-  border-left: 1px solid var(--color-border);
-  background: var(--color-bg);
+  background: color-mix(in srgb, var(--color-bg) 78%, transparent);
+  backdrop-filter: saturate(140%) blur(12px);
+  -webkit-backdrop-filter: saturate(140%) blur(12px);
+  box-shadow: -1px 0 0 var(--color-border-subtle), -4px 0 16px -8px rgba(17, 24, 39, 0.08);
   overflow: auto;
+  z-index: 1;
 }
 .gs-ed-right.is-closed {
   overflow: hidden;
+}
+
+/* 접힌 상태일 때는 완전히 투명한 토글만 남기고 그림자를 살짝 약화. */
+.gs-ed-left.is-closed,
+.gs-ed-right.is-closed {
+  background: color-mix(in srgb, var(--color-bg) 60%, transparent);
+  box-shadow: none;
 }
 .gs-ed-canvas {
   grid-area: edcanvas;
@@ -1292,4 +1312,15 @@
 html,
 body {
   overflow-x: hidden;
+}
+
+/* Print: html/body 의 height:100% + overflow-x:hidden 이 걸려 있으면
+   Chromium 이 첫 페이지 이후를 잘라내거나 가로 넘침을 클립한다. 인쇄
+   모드에서는 전부 해제해 콘텐츠 높이대로 자연스럽게 paginate 되게 한다. */
+@media print {
+  html,
+  body {
+    height: auto !important;
+    overflow: visible !important;
+  }
 }

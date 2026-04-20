@@ -3,8 +3,15 @@
    Legal-tech / Enterprise SaaS · White base + Blue accent
    ========================================================= */
 
-@import url('https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600;8..60,700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
-@import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.css');
+/* Font pairing:
+ *   - 본문/표제 공통(sans): Pretendard Variable — Korean-first (fallback Inter · system)
+ *     Variable 축 weight 100‒900 을 모두 활용해 display(700‒800) / body(400‒500)
+ *     / caption(400 soft) 을 하나의 패밀리로 처리. 별도 serif 스택 없음.
+ *   - 코드(mono): JetBrains Mono
+ * index.html 에서도 <link>로 preconnect + stylesheet를 걸어 FOUT을 줄인다.
+ */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css');
 
 :root {
   /* --- Color: Neutrals --- */
@@ -42,12 +49,15 @@
   --color-info: #2a3faf;
   --color-info-subtle: #eef0fb;
 
-  /* --- Typography --- */
-  --font-serif: 'Source Serif 4', 'Noto Serif KR', ui-serif, Georgia, serif;
+  /* --- Typography ---
+   * 통일: Pretendard Variable 하나로 display/body/caption 모두 처리.
+   * --font-serif / --font-display 토큰은 하위호환을 위해 sans 와 동일하게 매핑.
+   */
   --font-sans: 'Pretendard Variable', Pretendard, 'Inter', -apple-system, system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
 
-  --font-display: var(--font-serif);
+  --font-serif: var(--font-sans);
+  --font-display: var(--font-sans);
   --font-body: var(--font-sans);
 
   /* --- Radius --- */

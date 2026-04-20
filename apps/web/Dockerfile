@@ -4,16 +4,23 @@ WORKDIR /app
 
 RUN corepack enable && corepack prepare pnpm@latest --activate
 
+# workspace 루트 메타
 COPY pnpm-workspace.yaml ./
 COPY package.json ./
 
+# workspace 패키지 manifest 전부 (workspace:* 해석용)
 COPY apps/web/package.json ./apps/web/
+COPY packages/shared/package.json ./packages/shared/
 
 RUN pnpm install --no-frozen-lockfile
 
+# shared 스키마 먼저 빌드 (web 번들이 런타임에 import 한다)
+COPY packages/shared ./packages/shared
+RUN pnpm --filter @greedylabs/greedysign-shared build
+
+# web 소스 + 빌드
 COPY apps/web ./apps/web
 
-# API 서버 주소를 빌드 시점에 주입 (nginx가 프록시하므로 /api 그대로 사용)
 WORKDIR /app/apps/web
 ARG VITE_GOOGLE_CLIENT_ID
 ENV VITE_GOOGLE_CLIENT_ID=$VITE_GOOGLE_CLIENT_ID
