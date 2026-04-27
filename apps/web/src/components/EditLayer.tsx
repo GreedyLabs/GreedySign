@@ -826,8 +826,9 @@ export default function EditLayer({
               </>
             )}
 
-            {/* 내 필드가 아닐 때도 이미 채워진 다른 서명자/소유자의 응답을 보여준다. */}
-            {!isSetupMode && !isMyField && (
+            {/* 다른 참여자의 응답, 또는 내가 이미 서명을 끝낸 뒤(readOnly)의 내 응답을 보여준다.
+                인터랙티브 분기(`!readOnly && isMyField`)와 상호배타. */}
+            {!isSetupMode && (!isMyField || readOnly) && (
               <>
                 {field.field_type === 'text' && response?.text_value && (
                   <text

@@ -70,16 +70,33 @@ function createQueue(): {
   return { sink, take, drain, wake };
 }
 
+// nginx/Cloudflare 등 프록시가 SSE 스트림을 버퍼링하면 HTTP/3(QUIC)
+// 에서 `ERR_QUIC_PROTOCOL_ERROR` 로 죽는다. 즉시 첫 바이트 + 주기적
+// keepalive(`: ping`) + `X-Accel-Buffering: no` 로 셋 다 차단한다.
+const SSE_KEEPALIVE_MS = 25_000;
+function applySseHeaders(c: Parameters<typeof streamSSE>[0]) {
+  c.header('X-Accel-Buffering', 'no');
+  c.header('Cache-Control', 'no-cache, no-transform');
+}
+
 events.get('/user', async (c) => {
   const token = c.req.query('token');
   const user = verifyToken(token);
   if (!user) return c.body(null, 401);
 
+  applySseHeaders(c);
   return streamSSE(c, async (stream) => {
     const { sink, take, wake } = createQueue();
     const remove = addUserClient(user.id, sink);
 
+    // 즉시 한 줄(SSE 주석) 송신 — QUIC 스트림이 idle 상태에서 죽지 않도록.
+    await stream.write(': connected\n\n');
+    const pinger = setInterval(() => {
+      stream.write(': ping\n\n').catch(() => {});
+    }, SSE_KEEPALIVE_MS);
+
     stream.onAbort(() => {
+      clearInterval(pinger);
       remove();
       wake();
     });
@@ -92,6 +109,7 @@ events.get('/user', async (c) => {
         await stream.writeSSE({ data: JSON.stringify(data) });
       }
     } finally {
+      clearInterval(pinger);
       remove();
     }
   });
@@ -120,11 +138,18 @@ events.get('/documents/:docId', async (c) => {
     return c.body(null, 500);
   }
 
+  applySseHeaders(c);
   return streamSSE(c, async (stream) => {
     const { sink, take, wake } = createQueue();
     const remove = addClient(docId, user.id, sink);
 
+    await stream.write(': connected\n\n');
+    const pinger = setInterval(() => {
+      stream.write(': ping\n\n').catch(() => {});
+    }, SSE_KEEPALIVE_MS);
+
     stream.onAbort(() => {
+      clearInterval(pinger);
       remove();
       wake();
     });
@@ -137,6 +162,7 @@ events.get('/documents/:docId', async (c) => {
         await stream.writeSSE({ data: JSON.stringify(data) });
       }
     } finally {
+      clearInterval(pinger);
       remove();
     }
   });
