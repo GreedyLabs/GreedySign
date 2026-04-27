@@ -17,6 +17,7 @@ const transporter = nodemailer.createTransport({
 
 const FROM = process.env.SMTP_FROM ?? process.env.SMTP_USER ?? '';
 const APP_URL = process.env.APP_URL ?? '';
+const CONTACT_EMAIL = (FROM.match(/<([^>]+)>/)?.[1] ?? FROM).trim();
 
 // ─── 공통 이메일 래퍼 ─────────────────────────────────────
 // SMTP 미설정 시 콘솔 출력만 하고 에러는 던지지 않음.
@@ -66,8 +67,11 @@ function layout({
         <tr>
           <td style="padding:20px 32px;border-top:1px solid #f3f4f6;">
             <p style="margin:0;font-size:11px;color:#9ca3af;line-height:1.6;">
-              이 이메일은 GreedySign에서 자동 발송되었습니다.<br>
-              문의: <a href="mailto:support@greedysign.com" style="color:#6b7280;">support@greedysign.com</a>
+              이 이메일은 GreedySign에서 자동 발송되었습니다.${
+                CONTACT_EMAIL
+                  ? `<br>\n              문의: <a href="mailto:${CONTACT_EMAIL}" style="color:#6b7280;">${CONTACT_EMAIL}</a>`
+                  : ''
+              }
             </p>
           </td>
         </tr>

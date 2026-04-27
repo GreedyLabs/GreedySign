@@ -97,7 +97,10 @@ function DashboardStats({ docs }: { docs: DocRow[] }) {
   const inProgress = owned.filter((d) => d.status === 'in_progress').length;
   const drafts = owned.filter((d) => d.status === 'draft').length;
   const pendingMySign = shared.filter(
-    (d) => d.invite_status === 'accepted' && d.my_signing_status !== 'completed',
+    (d) =>
+      d.invite_status === 'accepted' &&
+      d.my_signing_status !== 'completed' &&
+      d.status !== 'voided',
   ).length;
 
   return (

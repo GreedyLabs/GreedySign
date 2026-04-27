@@ -30,6 +30,7 @@ export const UpdateFieldBody = z.object({
   width: Coordinate.optional(),
   height: Coordinate.optional(),
   label: OptionalText,
+  required: z.boolean().optional(),
   participant_id: z.string().min(1).optional(),
 });
 export type UpdateFieldBody = z.infer<typeof UpdateFieldBody>;

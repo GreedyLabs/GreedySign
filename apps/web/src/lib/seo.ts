@@ -16,7 +16,7 @@
  */
 
 // ─ 사이트 상수 ────────────────────────────────────────────────
-export const SITE_URL = 'https://greedysign.com';
+export const SITE_URL = 'https://sign.greedylabs.kr';
 export const SITE_NAME = 'GreedySign';
 export const DEFAULT_OG_IMAGE = `${SITE_URL}/og.png`;
 export const DEFAULT_LOCALE = 'ko_KR';

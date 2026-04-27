@@ -18,4 +18,4 @@ Disallow: /shared
 Disallow: /invite
 Disallow: /api
 
-Sitemap: https://greedysign.com/sitemap.xml
+Sitemap: https://sign.greedylabs.kr/sitemap.xml

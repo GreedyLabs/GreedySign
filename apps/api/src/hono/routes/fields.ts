@@ -103,7 +103,7 @@ fields.post('/', requireOwner, validate('json', CreateFieldBody), async (c) => {
 fields.put('/:fieldId', requireOwner, validate('json', UpdateFieldBody), async (c) => {
   try {
     const fieldId = c.req.param('fieldId');
-    const { x, y, width, height, label, participant_id } = c.req.valid('json');
+    const { x, y, width, height, label, required, participant_id } = c.req.valid('json');
 
     const [check] = await db
       .select({ document_id: formFields.document_id })
@@ -128,6 +128,7 @@ fields.put('/:fieldId', requireOwner, validate('json', UpdateFieldBody), async (
         ...(width !== undefined && { width }),
         ...(height !== undefined && { height }),
         ...(label !== undefined && { label }),
+        ...(required !== undefined && { required }),
         ...(participant_id !== undefined && { participant_id }),
       })
       .where(eq(formFields.id, fieldId))
