@@ -69,6 +69,7 @@ export interface SignatureRecord {
   method?: 'draw' | 'image' | string;
   svg_data?: string;
   thumbnail?: string;
+  is_default?: boolean;
 }
 
 type SignatureTab = 'draw' | 'image';

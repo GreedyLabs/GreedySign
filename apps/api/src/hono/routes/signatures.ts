@@ -81,6 +81,30 @@ signatures.put('/:id', validate('json', UpdateSignatureBody), async (c) => {
   }
 });
 
+signatures.patch('/:id/default', async (c) => {
+  try {
+    const userId = c.get('user').id;
+    const id = c.req.param('id');
+    // 1) 같은 유저의 다른 서명들 default 해제
+    await db
+      .update(userSignatures)
+      .set({ is_default: false })
+      .where(eq(userSignatures.user_id, userId));
+    // 2) 본 서명만 default true. 본인 소유 + 존재 확인.
+    const [updated] = await db
+      .update(userSignatures)
+      .set({ is_default: true })
+      .where(and(eq(userSignatures.id, id), eq(userSignatures.user_id, userId)))
+      .returning();
+    if (!updated) {
+      return c.json({ error: '서명을 찾을 수 없습니다' }, 404);
+    }
+    return c.json(updated);
+  } catch (err) {
+    return c.json({ error: (err as Error).message }, 500);
+  }
+});
+
 signatures.delete('/:id', async (c) => {
   try {
     const userId = c.get('user').id;

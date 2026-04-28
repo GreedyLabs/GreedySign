@@ -7,6 +7,7 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "db:init": "tsx src/db/init.ts",
+    "regen:signed-pdfs": "tsx src/scripts/regenerate-signed-pdfs.ts",
     "db:generate": "drizzle-kit generate",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",

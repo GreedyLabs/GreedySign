@@ -1,13 +1,16 @@
 /**
- * SettingsPage — profile + appearance tabs.
- * Route: /settings/:tab  (tab = 'profile' | 'appearance')
+ * SettingsPage — profile + appearance + signatures tabs.
+ * Route: /settings/:tab  (tab = 'profile' | 'appearance' | 'signatures')
  */
 import { useState, type CSSProperties } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '../stores/authStore';
 import api, { ApiError } from '../services/api';
+import { API_ENDPOINTS as endpoints } from '../services/endpoints';
 import { useParams, NavLink } from '../lib/router';
 import PageHeader from '../components/ui/PageHeader';
 import Avatar from '../components/ui/Avatar';
+import SignatureModal, { type SignatureRecord } from '../components/SignatureModal';
 import { MoonIcon, SunIcon, type IconProps } from '../components/ui/Icon';
 
 function errorMessage(err: unknown, fallback: string): string {
@@ -277,9 +280,232 @@ function AppearanceTab() {
   );
 }
 
+// ─── Signatures Tab ───────────────────────────────────────
+function SignaturesTab() {
+  const queryClient = useQueryClient();
+  const [modalState, setModalState] = useState<
+    { mode: 'create' } | { mode: 'edit'; sig: SignatureRecord } | null
+  >(null);
+  const [busyId, setBusyId] = useState<string | number | null>(null);
+
+  const { data: signatures = [], isLoading } = useQuery<SignatureRecord[]>({
+    queryKey: ['signatures'],
+    queryFn: async () => (await api.get<SignatureRecord[]>(endpoints.signatures.list)).data,
+  });
+
+  const refresh = () => queryClient.invalidateQueries({ queryKey: ['signatures'] });
+
+  const handleDelete = async (sig: SignatureRecord) => {
+    if (!confirm(`"${sig.name}" 서명을 삭제하시겠습니까?`)) return;
+    setBusyId(sig.id);
+    try {
+      await api.delete(endpoints.signatures.delete(sig.id));
+      refresh();
+    } catch (err) {
+      alert(errorMessage(err, '삭제 실패'));
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const handleSetDefault = async (sig: SignatureRecord) => {
+    if (sig.is_default) return;
+    setBusyId(sig.id);
+    try {
+      await api.patch(endpoints.signatures.setDefault(sig.id));
+      refresh();
+    } catch (err) {
+      alert(errorMessage(err, '기본 설정 실패'));
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  return (
+    <div className="col gap-6">
+      <div className="row" style={{ alignItems: 'flex-start', justifyContent: 'space-between', gap: 16 }}>
+        <div>
+          <h2
+            style={{
+              fontFamily: 'var(--font-display)',
+              fontSize: 18,
+              fontWeight: 600,
+              marginBottom: 4,
+            }}
+          >
+            내 서명
+          </h2>
+          <p className="t-caption">
+            저장된 서명을 관리합니다. 기본 서명은 새 문서에서 자동 선택됩니다.
+          </p>
+        </div>
+        <button className="btn btn-primary" onClick={() => setModalState({ mode: 'create' })}>
+          <svg
+            width={13}
+            height={13}
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.6"
+            strokeLinecap="round"
+          >
+            <path d="M8 2v12M2 8h12" />
+          </svg>
+          새 서명
+        </button>
+      </div>
+
+      {isLoading ? (
+        <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}>
+          <div className="gs-spinner" />
+        </div>
+      ) : signatures.length === 0 ? (
+        <div
+          className="gs-panel"
+          style={{
+            padding: 40,
+            textAlign: 'center',
+            color: 'var(--color-text-muted)',
+          }}
+        >
+          <div style={{ fontSize: 14, marginBottom: 12 }}>
+            저장된 서명이 없습니다.
+          </div>
+          <div className="t-caption" style={{ marginBottom: 16 }}>
+            서명을 미리 저장해 두면 문서에서 한 번에 적용할 수 있습니다.
+          </div>
+          <button className="btn btn-secondary" onClick={() => setModalState({ mode: 'create' })}>
+            첫 서명 만들기
+          </button>
+        </div>
+      ) : (
+        <div className="col gap-2">
+          {signatures.map((sig) => (
+            <div
+              key={sig.id}
+              className="gs-panel"
+              style={{
+                padding: '12px 16px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 16,
+              }}
+            >
+              {/* Thumbnail with checkered transparent BG */}
+              <div
+                style={{
+                  width: 120,
+                  height: 48,
+                  flexShrink: 0,
+                  background:
+                    'repeating-conic-gradient(#f3f4f6 0% 25%, #ffffff 0% 50%) 50% / 14px 14px',
+                  border: '1px solid var(--color-border-subtle)',
+                  borderRadius: 6,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  overflow: 'hidden',
+                }}
+              >
+                <img
+                  src={
+                    sig.thumbnail ||
+                    `data:image/svg+xml;charset=utf-8,${encodeURIComponent(sig.svg_data || '')}`
+                  }
+                  alt={sig.name}
+                  style={{ maxHeight: 42, maxWidth: '100%', objectFit: 'contain' }}
+                />
+              </div>
+
+              {/* Meta */}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div
+                  className="row gap-2"
+                  style={{ alignItems: 'center', marginBottom: 2 }}
+                >
+                  <span style={{ fontSize: 14, fontWeight: 500 }}>{sig.name}</span>
+                  {sig.is_default && (
+                    <span
+                      style={{
+                        padding: '2px 8px',
+                        fontSize: 10,
+                        fontWeight: 600,
+                        borderRadius: 'var(--radius-full)',
+                        background: 'var(--color-primary-subtle)',
+                        color: 'var(--color-primary)',
+                        letterSpacing: '0.04em',
+                      }}
+                    >
+                      기본
+                    </span>
+                  )}
+                </div>
+                <div className="t-caption">
+                  {sig.method === 'image' ? '이미지 업로드' : '직접 그림'}
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="row gap-1" style={{ flexShrink: 0 }}>
+                {!sig.is_default && (
+                  <button
+                    className="btn btn-ghost btn-sm"
+                    onClick={() => handleSetDefault(sig)}
+                    disabled={busyId === sig.id}
+                    title="기본 서명으로 설정"
+                  >
+                    기본 설정
+                  </button>
+                )}
+                <button
+                  className="btn btn-ghost btn-sm"
+                  onClick={() => setModalState({ mode: 'edit', sig })}
+                  title="수정"
+                >
+                  수정
+                </button>
+                <button
+                  className="icon-btn"
+                  onClick={() => handleDelete(sig)}
+                  disabled={busyId === sig.id}
+                  title="삭제"
+                  style={{ color: 'var(--color-danger)' }}
+                >
+                  <svg
+                    width={14}
+                    height={14}
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.4"
+                    strokeLinecap="round"
+                  >
+                    <path d="M2 4h12M6 4V2h4v2M5 4l1 10h4l1-10" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {modalState && (
+        <SignatureModal
+          editing={modalState.mode === 'edit' ? modalState.sig : null}
+          onClose={() => setModalState(null)}
+          onSaved={() => {
+            refresh();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
 // ─── SettingsPage ─────────────────────────────────────────
-const TABS: { id: 'profile' | 'appearance'; label: string }[] = [
+const TABS: { id: 'profile' | 'appearance' | 'signatures'; label: string }[] = [
   { id: 'profile', label: '프로필' },
+  { id: 'signatures', label: '내 서명' },
   { id: 'appearance', label: '화면 설정' },
 ];
 
@@ -304,6 +530,7 @@ export default function SettingsPage() {
         {/* Content */}
         <div>
           {tab === 'profile' && <ProfileTab />}
+          {tab === 'signatures' && <SignaturesTab />}
           {tab === 'appearance' && <AppearanceTab />}
         </div>
       </div>

@@ -16,9 +16,9 @@
  *   a. "확정본 PDF 다운로드" — 모든 서명이 박힌 합본 PDF (signed_pdf_path)
  *   b. "인증서 인쇄/PDF" — window.print() (인증서 자체를 PDF 로 저장)
  */
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import api, { ApiError } from '../services/api';
-import { useParams, useNavigate } from '../lib/router';
+import { useParams, useNavigate, useSearchParams } from '../lib/router';
 import { useAuthStore } from '../stores/authStore';
 import BrandMark from '../components/ui/BrandMark';
 import { formatDateTimeLong, getTimeZoneLabel } from '../lib/format';
@@ -510,6 +510,8 @@ export default function CompletePage() {
   const [error, setError] = useState<PageError | null>(null);
   const [downloading, setDl] = useState(false);
   const downloadAnchorRef = useRef<HTMLButtonElement | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const autoDownloadFiredRef = useRef(false);
 
   useEffect(() => {
     api
@@ -533,7 +535,7 @@ export default function CompletePage() {
   }, [docId]);
 
   // ─── 확정본 PDF 다운로드 ──────────────────────────────
-  const handleDownloadSigned = async () => {
+  const handleDownloadSigned = useCallback(async () => {
     setDl(true);
     try {
       const res = await api.post<Blob>(
@@ -572,7 +574,23 @@ export default function CompletePage() {
     } finally {
       setDl(false);
     }
-  };
+  }, [docId, cert?.document?.name]);
+
+  // 이메일에서 ?download=1 로 진입한 경우 인증서 로드 후 자동 다운로드 트리거.
+  // ref 가드로 cert 가 갱신돼도 한 번만 발화. 발화 후 쿼리는 URL 에서 제거해
+  // 새로고침/뒤로가기 시 재발화 방지.
+  useEffect(() => {
+    if (autoDownloadFiredRef.current) return;
+    if (searchParams.get('download') !== '1') return;
+    if (!cert?.document?.is_complete) return;
+    autoDownloadFiredRef.current = true;
+    handleDownloadSigned();
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete('download');
+      return next;
+    }, { replace: true });
+  }, [cert, searchParams, setSearchParams, handleDownloadSigned]);
 
   const handlePrint = () => window.print();
 

@@ -130,7 +130,11 @@ export async function sendCompletionEmail({
   docId,
 }: SendCompletionEmailParams): Promise<void> {
   const docUrl = `${APP_URL}/docs/${docId}/complete`;
-  const downloadUrl = `${APP_URL}/api/documents/${docId}/export`;
+  // 인증서 페이지는 ?download=1 쿼리를 받으면 도착 즉시 확정본 PDF 다운로드를
+  // 자동 트리거한다. 이메일 링크 클릭은 GET + 무 헤더라 API 직링크로는
+  // 다운로드 못 받는다(POST + Authorization 필수). 인증서 페이지를 경유해
+  // 라우터 가드가 로그인 → 다운로드까지 한 흐름으로 처리하도록 위임.
+  const downloadUrl = `${docUrl}?download=1`;
 
   await safeSend({
     from: FROM,

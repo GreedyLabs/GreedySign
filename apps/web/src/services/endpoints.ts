@@ -67,6 +67,7 @@ export const API_ENDPOINTS = {
     create: '/signatures',
     update: (id: string | number) => `/signatures/${id}`,
     delete: (id: string | number) => `/signatures/${id}`,
+    setDefault: (id: string | number) => `/signatures/${id}/default`,
   },
 
   // 초대 링크 (이메일 → 수락)
