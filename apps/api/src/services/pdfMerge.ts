@@ -1,4 +1,18 @@
-import { PDFDocument, rgb } from 'pdf-lib';
+import {
+  PDFDocument,
+  rgb,
+  LineCapStyle,
+  LineJoinStyle,
+  pushGraphicsState,
+  popGraphicsState,
+  setStrokingColor,
+  setLineWidth,
+  setLineCap,
+  setLineJoin,
+  moveTo,
+  lineTo,
+  stroke,
+} from 'pdf-lib';
 import sharp from 'sharp';
 import { db } from '../db/pool.js';
 import { sql } from 'drizzle-orm';
@@ -54,24 +68,32 @@ async function applyResponse(
       color: rgb(0, 0, 0),
     });
   } else if (field_type === 'checkbox' && checked) {
-    const cx = x + width * 0.2,
-      cy = y + height * 0.45;
-    const mx = x + width * 0.45,
-      my = y + height * 0.2;
-    const ex = x + width * 0.85,
-      ey = y + height * 0.75;
-    page.drawLine({
-      start: { x: cx, y: cy },
-      end: { x: mx, y: my },
-      thickness: 1.5,
-      color: rgb(0, 0, 0.8),
-    });
-    page.drawLine({
-      start: { x: mx, y: my },
-      end: { x: ex, y: ey },
-      thickness: 1.5,
-      color: rgb(0, 0, 0.8),
-    });
+    // 에디터(EditLayer.tsx) 의 체크마크 SVG path 와 동일한 좌표 + 스타일.
+    // 두 line 을 따로 긋는 대신 하나의 연속 path 로 stroke 하고, line cap/join
+    // 둘 다 Round 로 두어 V 꼭짓점이 매끄럽게 이어지게 한다.
+    // SVG 좌표(Y down): M 28% 55% l +14% +18% l +30% -32%
+    //   → PDF 좌표(Y up) 로 환산: (28%, 45%) → (42%, 27%) → (72%, 59%)
+    const p1x = x + width * 0.28;
+    const p1y = y + height * 0.45;
+    const p2x = x + width * 0.42;
+    const p2y = y + height * 0.27;
+    const p3x = x + width * 0.72;
+    const p3y = y + height * 0.59;
+    const thickness = Math.max(1.4, height * 0.12);
+    page.pushOperators(
+      pushGraphicsState(),
+      setStrokingColor(rgb(0, 0, 0)),
+      setLineWidth(thickness),
+      setLineCap(LineCapStyle.Round),
+      // V 꼭짓점은 Miter — 이어진 선이라 끊김 가릴 필요 없음. 90° 각도라
+      // 미터 limit (default 10) 안에 들어와 잘림 없이 뾰족하게 마감됨.
+      setLineJoin(LineJoinStyle.Miter),
+      moveTo(p1x, p1y),
+      lineTo(p2x, p2y),
+      lineTo(p3x, p3y),
+      stroke(),
+      popGraphicsState(),
+    );
   } else if ((field_type === 'signature' || field_type === 'initial') && svg_data) {
     try {
       const pngBytes = await rasterizeSignature(svg_data, width, height);

@@ -102,37 +102,14 @@ certificate.get('/', requireDocAccess, async (c) => {
       ORDER BY p.is_owner DESC, p.signing_order, p.invited_at
     `);
 
-    const signingAuditResult = await db.execute(sql`
-      SELECT al.participant_id, al.ip, al.user_agent, al.created_at
-      FROM audit_logs al
-      WHERE al.document_id = ${docId}::uuid AND al.action = 'signing_completed'
-      ORDER BY al.created_at
-    `);
-
-    const signingAuditByParticipant: Record<
-      string,
-      { ip?: string | null; user_agent?: string | null; created_at: Date }
-    > = {};
-    for (const row of signingAuditResult.rows as {
-      participant_id: string;
-      ip?: string | null;
-      user_agent?: string | null;
-      created_at: Date;
-    }[]) {
-      if (!signingAuditByParticipant[row.participant_id]) {
-        signingAuditByParticipant[row.participant_id] = row;
-      }
-    }
-
+    // 인증서 페이로드에는 IP/UA 같은 개인정보를 노출하지 않는다.
+    // (DB(audit_logs)에는 그대로 남아있어 내부 감사·법적 대응엔 사용 가능.)
+    // 서명 완료 시각은 audit 에서 가져오지 않고 participant.completed_at 으로 충분.
     const participantsWithAudit = (
       partResult.rows as Array<
         { id: string; role: string; signing_status: string } & Record<string, unknown>
       >
-    ).map((p) => ({
-      ...p,
-      signed_ip: signingAuditByParticipant[p.id]?.ip ?? null,
-      signed_user_agent: signingAuditByParticipant[p.id]?.user_agent ?? null,
-    }));
+    ).map((p) => ({ ...p }));
 
     const signers = participantsWithAudit.filter((p) => p.role === 'signer');
 
@@ -140,8 +117,9 @@ certificate.get('/', requireDocAccess, async (c) => {
       TRACKED_AUDIT_ACTIONS.map((a) => sql`${a}`),
       sql`, `
     );
+    // audit.ip 도 인증서 응답에서는 제외. 내부 추적용은 audit_logs 테이블 직조회.
     const auditResult = await db.execute(sql`
-      SELECT al.id, al.action, al.created_at, al.ip, al.meta,
+      SELECT al.id, al.action, al.created_at, al.meta,
              al.user_id, al.participant_id,
              u.name AS user_name, u.email AS user_email,
              p.email AS participant_email,

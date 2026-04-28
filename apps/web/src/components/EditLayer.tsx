@@ -719,7 +719,7 @@ export default function EditLayer({
                         strokeWidth={Math.max(1.4, sh * 0.12)}
                         fill="none"
                         strokeLinecap="round"
-                        strokeLinejoin="round"
+                        strokeLinejoin="miter"
                       />
                     )}
                   </g>
@@ -876,7 +876,7 @@ export default function EditLayer({
                         strokeWidth={Math.max(1.4, sh * 0.12)}
                         fill="none"
                         strokeLinecap="round"
-                        strokeLinejoin="round"
+                        strokeLinejoin="miter"
                       />
                     )}
                   </g>

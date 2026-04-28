@@ -9,7 +9,9 @@
  *   1) 문서 식별자(UUID), 페이지 수, 크기, 서명 모드
  *   2) 무결성 — 원본 SHA-256, 확정본 SHA-256
  *   3) 소유자 — 이름·이메일
- *   4) 참여자별 — 이름, 이메일, 역할(서명자/참조), 초대/수락/완료 시각, 서명 IP
+ *   4) 참여자별 — 이름, 이메일, 역할(서명자/참조), 초대/수락/완료 시각
+ *      (IP/User-Agent 같은 PII 는 인증서에 노출하지 않음. audit_logs 에 보존되어
+ *       내부 감사·법적 대응에만 사용.)
  *   5) 감사 타임라인 — 업로드·발송·수락·서명·완료 등 주요 이벤트
  *
  * 다운로드 버튼은 두 가지를 제공한다.
@@ -42,7 +44,6 @@ interface CertParticipant {
   invited_at?: string | null;
   responded_at?: string | null;
   completed_at?: string | null;
-  signed_ip?: string | null;
   [key: string]: unknown;
 }
 
@@ -70,7 +71,6 @@ interface AuditRow {
   id: number | string;
   action: string;
   created_at: string;
-  ip?: string | null;
   user_name?: string | null;
   user_email?: string | null;
   participant_name?: string | null;
@@ -702,7 +702,7 @@ export default function CompletePage() {
               <h1 className="gs-cert-title">전자서명 완료 인증서</h1>
               <p className="gs-cert-subtitle">
                 본 인증서는 GreedySign 전자서명 플랫폼이 위 문서에 대한 서명 절차를 기록·검증한
-                결과를 증명합니다. 모든 서명자의 신원·동의·서명 시각·접속 IP 가 감사 로그에 보존되며,
+                결과를 증명합니다. 모든 서명자의 신원·동의·서명 시각이 감사 로그에 보존되며,
                 확정된 PDF 원본은 SHA-256 해시로 무결성이 보장됩니다.
               </p>
             </div>
@@ -889,8 +889,6 @@ export default function CompletePage() {
                       <>
                         <dt>서명 시각</dt>
                         <dd>{p.completed_at ? formatDateTime(p.completed_at) : '—'}</dd>
-                        <dt>서명 IP</dt>
-                        <dd>{p.signed_ip ?? '—'}</dd>
                       </>
                     )}
                   </dl>
@@ -952,7 +950,6 @@ export default function CompletePage() {
                   <span className="gs-cert-timeline-action">
                     {AUDIT_LABEL[row.action] ?? row.action}
                   </span>
-                  {row.ip && <span className="gs-cert-timeline-meta">· IP {row.ip}</span>}
                 </div>
               ))}
             </div>
