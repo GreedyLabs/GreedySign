@@ -159,21 +159,23 @@ async function dispatchSingleRecipient(opts: {
     }
 
     // 3. signer participant + invite token
-    //    본인 수신자면 user_id/is_owner 도 함께 채워 통합 participant 로 만든다.
-    //    invite_status 는 본인이라도 'pending' 유지 — 메일을 받고 동일한
-    //    토큰 링크로 서명해야 흐름이 일관된다. (감사 로그/대시보드 동일)
+    //    본인 수신자면 user_id/is_owner 와 함께 invite_status='accepted' 로
+    //    바로 들어간다. 이미 로그인 상태라 invite 수락 의식이 의미 없고,
+    //    submit 미들웨어가 accepted 만 허용하므로 pending 으로 두면 본인이
+    //    자기 문서를 서명할 때 403 이 난다.
     const inviteToken = randomBytes(24).toString('hex');
     const [signerPart] = await db
       .insert(documentParticipants)
       .values({
         document_id: doc.id,
-        ...(isSelfRecipient && { user_id: owner.id, is_owner: true }),
+        ...(isSelfRecipient && { user_id: owner.id }),
         email: recipient.email,
         name: isSelfRecipient ? (recipient.name ?? owner.name) : recipient.name,
         role: 'signer',
         is_owner: isSelfRecipient,
-        invite_token: inviteToken,
-        invite_status: 'pending',
+        // 본인 수신자는 메일 링크가 없어도 바로 서명할 수 있어야 한다.
+        invite_token: isSelfRecipient ? null : inviteToken,
+        invite_status: isSelfRecipient ? 'accepted' : 'pending',
         signing_status: 'in_progress',
         expires_at: campaign.expires_at ?? null,
       })
