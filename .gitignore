@@ -8,5 +8,10 @@ uploads/
 .tanstack/
 _tmp_*
 
+# pdfMerge 가 사용하는 한글 폰트 — Dockerfile 빌드 시 다운로드되고,
+# 로컬에서 tsx 로 스크립트 돌릴 때만 apps/api/assets 로 받아 둔다.
+apps/api/assets/*.otf
+apps/api/assets/*.ttf
+
 # 향후 정리
 docs/

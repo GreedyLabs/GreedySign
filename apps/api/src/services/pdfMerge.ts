@@ -1,5 +1,6 @@
 import {
   PDFDocument,
+  PDFFont,
   rgb,
   LineCapStyle,
   LineJoinStyle,
@@ -13,10 +14,32 @@ import {
   lineTo,
   stroke,
 } from 'pdf-lib';
+import fontkit from '@pdf-lib/fontkit';
 import sharp from 'sharp';
+import { readFile } from 'fs/promises';
+import { dirname, resolve } from 'path';
+import { fileURLToPath } from 'url';
 import { db } from '../db/pool.js';
 import { sql } from 'drizzle-orm';
 import { readPdf } from './storage.js';
+
+// 한글 폰트 — pdf-lib 기본 폰트(StandardFonts.Helvetica, WinAnsi 인코딩)는
+// 한글을 못 그린다. Noto Sans KR 을 한 번 읽어 메모리에 캐시하고, 합본 PDF
+// 마다 fontkit 으로 임베드해 텍스트·날짜 필드에 사용한다.
+//
+// 폰트 파일은 apps/api/assets/NotoSansKR-Regular.otf 에 커밋된다(OFL 라이선스).
+// 빌드 산출물(dist) 에서도 동일 경로를 참조하므로 Dockerfile 이 assets 를
+// 통째로 복사하기만 하면 된다.
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const FONT_PATH = resolve(__dirname, '../../assets/NotoSansKR-Regular.otf');
+
+let cachedFontBytes: Uint8Array | null = null;
+async function loadKoreanFontBytes(): Promise<Uint8Array> {
+  if (cachedFontBytes) return cachedFontBytes;
+  const buf = await readFile(FONT_PATH);
+  cachedFontBytes = new Uint8Array(buf);
+  return cachedFontBytes;
+}
 
 interface FieldResponse {
   field_type: string;
@@ -56,7 +79,8 @@ async function rasterizeSignature(
 async function applyResponse(
   pdfDoc: PDFDocument,
   page: ReturnType<PDFDocument['getPages']>[number],
-  response: FieldResponse
+  response: FieldResponse,
+  font: PDFFont,
 ): Promise<void> {
   const { field_type, x, y, width, height, text_value, checked, svg_data } = response;
 
@@ -66,6 +90,7 @@ async function applyResponse(
       y: y + 2,
       size: Math.max(8, height * 0.6),
       color: rgb(0, 0, 0),
+      font,
     });
   } else if (field_type === 'checkbox' && checked) {
     // 에디터(EditLayer.tsx) 의 체크마크 SVG path 와 동일한 좌표 + 스타일.
@@ -131,6 +156,7 @@ async function applyResponse(
       y: y + 2,
       size: Math.max(8, height * 0.6),
       color: rgb(0, 0, 0),
+      font,
     });
   }
 }
@@ -142,6 +168,12 @@ export async function buildCombinedPdf(
 ): Promise<Uint8Array> {
   const pdfBytes = await readPdf(pdfPath);
   const pdfDoc = await PDFDocument.load(pdfBytes);
+  // 한글 텍스트 응답을 그리려면 fontkit + CJK 폰트 임베드가 필요. 매 합본
+  // 마다 새 PDFDocument 인스턴스라 fontkit 등록과 embedFont 도 매번 호출.
+  pdfDoc.registerFontkit(fontkit);
+  const koreanFont = await pdfDoc.embedFont(await loadKoreanFontBytes(), {
+    subset: true,
+  });
   const pages = pdfDoc.getPages();
 
   // 주의: drizzle 의 sql`` 안에서 JS 배열은 "$1, $2, ... 의 튜플"로 펼쳐지므로
@@ -171,7 +203,7 @@ export async function buildCombinedPdf(
   for (const response of result.rows as unknown as FieldResponse[]) {
     const pageIndex = (response.page_number || 1) - 1;
     if (pageIndex < 0 || pageIndex >= pages.length) continue;
-    await applyResponse(pdfDoc, pages[pageIndex]!, response);
+    await applyResponse(pdfDoc, pages[pageIndex]!, response, koreanFont);
   }
 
   return pdfDoc.save();
