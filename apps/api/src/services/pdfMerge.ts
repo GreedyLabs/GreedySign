@@ -170,9 +170,15 @@ export async function buildCombinedPdf(
   const pdfDoc = await PDFDocument.load(pdfBytes);
   // 한글 텍스트 응답을 그리려면 fontkit + CJK 폰트 임베드가 필요. 매 합본
   // 마다 새 PDFDocument 인스턴스라 fontkit 등록과 embedFont 도 매번 호출.
+  //
+  // subset:false 인 이유 — fontkit 1.x 가 CFF 기반 OTF (Noto Sans CJK 가
+  // 그 부류) 를 subset 할 때 글리프 인덱스 매핑이 깨져 입력 글자가
+  // ASCII 첫 코드포인트들(`!`, `"`, `#`...) 로 치환되는 알려진 버그가 있다.
+  // 전체 임베드는 PDF 가 무거워지지만(폰트 ~16MB 가 그대로 들어감) 글리프
+  // 매핑은 확실하다.
   pdfDoc.registerFontkit(fontkit);
   const koreanFont = await pdfDoc.embedFont(await loadKoreanFontBytes(), {
-    subset: true,
+    subset: false,
   });
   const pages = pdfDoc.getPages();
 
