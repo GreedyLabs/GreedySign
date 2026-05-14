@@ -120,6 +120,11 @@ async function dispatchSingleRecipient(opts: {
   req: ReqInfo | null;
 }): Promise<{ ok: true; documentId: string } | { ok: false; error: string }> {
   const { campaign, recipient, template, owner, req } = opts;
+  // 본인이 수신자인 경우: owner cc participant 를 따로 만들지 않고 signer
+  // participant 하나에 합친다(role='signer' + is_owner=true). 그렇지 않으면
+  // 동일 document 에 같은 이메일이 두 번 들어가 uq_participants_doc_email
+  // 인덱스를 위반한다.
+  const isSelfRecipient = recipient.email.toLowerCase() === owner.email.toLowerCase();
   try {
     // 1. 문서 documents row — 템플릿 PDF 재사용(파일 복제 X)
     const [doc] = await db
@@ -138,29 +143,35 @@ async function dispatchSingleRecipient(opts: {
       })
       .returning({ id: documents.id });
 
-    // 2. owner cc participant
-    await db.insert(documentParticipants).values({
-      document_id: doc.id,
-      user_id: owner.id,
-      email: owner.email,
-      name: owner.name,
-      role: 'cc',
-      is_owner: true,
-      invite_status: 'accepted',
-      signing_status: 'completed',
-      completed_at: new Date(),
-    });
+    // 2. owner cc participant — 본인 발송이면 생략(아래 signer 행과 통합)
+    if (!isSelfRecipient) {
+      await db.insert(documentParticipants).values({
+        document_id: doc.id,
+        user_id: owner.id,
+        email: owner.email,
+        name: owner.name,
+        role: 'cc',
+        is_owner: true,
+        invite_status: 'accepted',
+        signing_status: 'completed',
+        completed_at: new Date(),
+      });
+    }
 
     // 3. signer participant + invite token
+    //    본인 수신자면 user_id/is_owner 도 함께 채워 통합 participant 로 만든다.
+    //    invite_status 는 본인이라도 'pending' 유지 — 메일을 받고 동일한
+    //    토큰 링크로 서명해야 흐름이 일관된다. (감사 로그/대시보드 동일)
     const inviteToken = randomBytes(24).toString('hex');
     const [signerPart] = await db
       .insert(documentParticipants)
       .values({
         document_id: doc.id,
+        ...(isSelfRecipient && { user_id: owner.id, is_owner: true }),
         email: recipient.email,
-        name: recipient.name,
+        name: isSelfRecipient ? (recipient.name ?? owner.name) : recipient.name,
         role: 'signer',
-        is_owner: false,
+        is_owner: isSelfRecipient,
         invite_token: inviteToken,
         invite_status: 'pending',
         signing_status: 'in_progress',
@@ -210,7 +221,12 @@ async function dispatchSingleRecipient(opts: {
       docId: doc.id,
       userId: owner.id,
       action: 'campaign_envelope_dispatched',
-      meta: { campaign_id: campaign.id, recipient_id: recipient.id, email: recipient.email },
+      meta: {
+        campaign_id: campaign.id,
+        recipient_id: recipient.id,
+        email: recipient.email,
+        self: isSelfRecipient,
+      },
       req,
     });
     return { ok: true, documentId: doc.id };
@@ -908,7 +924,12 @@ campaigns.post('/:id/dispatch', async (c) => {
   }
 });
 
-// ─── POST /:id/recipients/:rid/resend — 미응답 수신자 재발송 ──────────────
+// ─── POST /:id/recipients/:rid/resend — 미응답 재발송 + 실패 수신자 재시도 ──
+// 두 가지 경로:
+//   (a) sent/viewed: 동일한 invite 토큰으로 메일만 한 번 더 보낸다.
+//   (b) failed:      문서가 안 만들어졌을 가능성이 높으므로 dispatch 를 처음
+//                    부터 다시 시도한다. recipient row 는 재사용하므로
+//                    (campaign_id, email) UNIQUE 충돌이 없다.
 campaigns.post('/:id/recipients/:recipientId/resend', async (c) => {
   try {
     const me = c.get('user');
@@ -928,11 +949,54 @@ campaigns.post('/:id/recipients/:recipientId/resend', async (c) => {
         )
       );
     if (!recip) return c.json({ error: '수신자를 찾을 수 없습니다' }, 404);
+
+    // ── (b) failed 또는 발송 전 pending: 처음부터 dispatch 재시도 ──
+    if (recip.status === 'failed' || (!recip.document_id && recip.status === 'pending')) {
+      if (owned.campaign.status !== 'in_progress' && owned.campaign.status !== 'draft') {
+        return c.json({ error: '진행 중 또는 초안 캠페인에서만 재시도할 수 있습니다' }, 400);
+      }
+      const [tpl] = await db
+        .select()
+        .from(documentTemplates)
+        .where(eq(documentTemplates.id, owned.campaign.template_id));
+      if (!tpl) return c.json({ error: '템플릿이 삭제되었습니다' }, 400);
+      const tplFields = await db
+        .select()
+        .from(templateFields)
+        .where(eq(templateFields.template_id, tpl.id));
+      if (!tplFields.length) return c.json({ error: '템플릿에 필드가 없습니다' }, 400);
+      const [owner] = await db
+        .select({ id: users.id, name: users.name, email: users.email })
+        .from(users)
+        .where(eq(users.id, me.id));
+      if (!owner) return c.json({ error: '소유자 정보를 찾을 수 없습니다' }, 500);
+
+      // status 만 pending 으로 초기화하면 dispatchSingleRecipient 가 동일 row 를
+      // 갱신하면서 새 document 를 붙인다.
+      await db
+        .update(campaignRecipients)
+        .set({ status: 'pending', error: null })
+        .where(eq(campaignRecipients.id, recip.id));
+      const fresh = { ...recip, status: 'pending', error: null };
+
+      const result = await dispatchSingleRecipient({
+        campaign: owned.campaign,
+        recipient: fresh,
+        template: tpl,
+        templateFields: tplFields,
+        owner,
+        req: reqLike,
+      });
+      if (!result.ok) return c.json({ error: result.error }, 500);
+      return c.json({ ok: true, retried: true, documentId: result.documentId });
+    }
+
+    // ── (a) sent/viewed: 메일만 재발송 ──
     if (!recip.document_id) {
       return c.json({ error: '아직 발송되지 않은 수신자입니다' }, 400);
     }
     if (recip.status !== 'sent' && recip.status !== 'viewed') {
-      return c.json({ error: '미응답(sent/viewed) 상태의 수신자만 재발송할 수 있습니다' }, 400);
+      return c.json({ error: '미응답(sent/viewed) 또는 실패(failed) 수신자만 재발송할 수 있습니다' }, 400);
     }
 
     const [signerPart] = await db

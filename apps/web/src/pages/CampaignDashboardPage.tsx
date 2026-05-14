@@ -544,9 +544,13 @@ export default function CampaignDashboardPage() {
       stopPropagation: true,
       render: (r) => {
         const resendable = r.status === 'sent' || r.status === 'viewed';
+        const isFailed = r.status === 'failed';
+        // failed 는 dispatch 가 깨졌을 뿐이므로 응답 완료(signed/declined)와 달리
+        // 재시도(=resend 의 failed 분기)와 제외(/exclude)가 모두 가능하다.
+        // 그래서 TERMINAL 에 들어있어도 예외적으로 액션을 노출한다.
         const isTerminal = TERMINAL.has(r.status);
-        const canExclude = inProgress && !isTerminal;
-        const canReplace = inProgress && r.status !== 'signed';
+        const canExclude = inProgress && (!isTerminal || isFailed);
+        const canReplace = inProgress && r.status !== 'signed' && !isFailed;
         return (
           <>
             {r.document_id && r.status === 'signed' && (
@@ -570,6 +574,21 @@ export default function CampaignDashboardPage() {
                 disabled={resendMut.isPending}
               >
                 재발송
+              </button>
+            )}
+            {isFailed && (
+              <button
+                className="btn btn-ghost btn-sm"
+                onClick={() => {
+                  if (!confirm(`${r.email} 발송을 처음부터 다시 시도합니다.`)) return;
+                  resendMut.mutate(r.id, {
+                    onSuccess: () => alert('재시도 완료'),
+                    onError: (err) => alert(errorMessage(err, '재시도 실패')),
+                  });
+                }}
+                disabled={resendMut.isPending}
+              >
+                재시도
               </button>
             )}
             {canReplace && (
