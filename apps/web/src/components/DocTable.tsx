@@ -30,6 +30,12 @@ export interface DocRow {
 /** 참여자는 통합 my_participant_status 우선, 없으면 구 API shape 로 fallback. */
 function getStatusProps(doc: DocRow): { kind: StatusKind; status: string } {
   if (doc.is_owner) return { kind: 'document', status: doc.status ?? 'in_progress' };
+  // 문서 자체가 종결(voided/completed)된 경우 참여자 액션은 무의미하므로
+  // 문서 상태를 그대로 표시한다. 그렇지 않으면 owner 가 void 한 문서가
+  // 공유 목록에서 여전히 "서명 대기" 로 보여 혼동을 준다.
+  if (doc.status === 'voided' || doc.status === 'completed') {
+    return { kind: 'document', status: doc.status };
+  }
   const unified = doc.my_participant_status;
   if (unified) return { kind: 'participant', status: unified };
   if (doc.invite_status === 'declined') return { kind: 'participant', status: 'declined' };

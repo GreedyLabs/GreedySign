@@ -106,9 +106,10 @@ interface SidebarProps {
   myCount: number;
   sharedCount: number;
   pendingCount: number;
+  campaignCount: number;
 }
 
-function Sidebar({ myCount, sharedCount, pendingCount }: SidebarProps) {
+function Sidebar({ myCount, sharedCount, pendingCount, campaignCount }: SidebarProps) {
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
   const navigate = useNavigate();
@@ -242,6 +243,9 @@ function Sidebar({ myCount, sharedCount, pendingCount }: SidebarProps) {
             <path d="M14 2h-3v3" />
           </svg>
           <span className="flex-1 truncate">캠페인</span>
+          {campaignCount > 0 && (
+            <span className="gs-nav-count t-num">{campaignCount}</span>
+          )}
         </NavLink>
       </nav>
 
@@ -415,17 +419,51 @@ interface AppShellProps {
 export default function AppShell({ children }: AppShellProps) {
   const { pathname } = useLocation();
   const { data: docs = [] } = useDocs();
-  // DocSummary 는 is_owner/invite_status 를 공식 타입에 포함하지 않으므로 런타임
+  // DocSummary 는 is_owner/invite_status 등을 공식 타입에 포함하지 않으므로 런타임
   // 필터용으로 any-cast 한 다음 카운트만 취득한다. (Phase 5 에서 shared Zod 로 정렬.)
   interface DocFilterShape {
     is_owner?: boolean;
+    status?: string;
     invite_status?: string;
+    my_signing_status?: string;
   }
-  const myCount = (docs as unknown as DocFilterShape[]).filter((d) => d.is_owner).length;
-  const sharedCount = (docs as unknown as DocFilterShape[]).filter((d) => !d.is_owner).length;
-  const pendingCount = (docs as unknown as DocFilterShape[]).filter(
-    (d) => !d.is_owner && d.invite_status === 'pending',
+  const ds = docs as unknown as DocFilterShape[];
+  // 사이드바 토큰은 "내가 지금 신경 써야 할" 문서 수만 보여준다.
+  //   - 내 문서: 내가 owner 이고 아직 종결(completed/voided) 안 된 것
+  //   - 공유받은: 종결 안 된 문서 중, 내가 서명/거절을 아직 안 한 것
+  // completed 와 voided 는 더 이상 행동할 게 없으므로 카운트에서 제외한다.
+  const myCount = ds.filter(
+    (d) => d.is_owner && d.status !== 'completed' && d.status !== 'voided',
   ).length;
+  const sharedCount = ds.filter(
+    (d) =>
+      !d.is_owner &&
+      d.status !== 'completed' &&
+      d.status !== 'voided' &&
+      d.my_signing_status !== 'completed' &&
+      d.my_signing_status !== 'declined' &&
+      d.invite_status !== 'declined',
+  ).length;
+  // 초대 미응답(pending) 만 따로 — 사이드바에서는 sharedCount 가 0 이어도
+  // pending 이 있으면 한 번 더 강조 표시하던 기존 동작을 유지.
+  const pendingCount = ds.filter(
+    (d) => !d.is_owner && d.invite_status === 'pending' && d.status !== 'voided',
+  ).length;
+
+  // 캠페인 토큰 — 진행중(in_progress) 캠페인 수. CampaignsPage 가 쓰는 동일 키.
+  interface CampaignShape {
+    status?: string;
+  }
+  const { data: campaigns = [] } = useQuery<CampaignShape[]>({
+    queryKey: ['campaigns'],
+    queryFn: async () => {
+      const { data } = await api.get<CampaignShape[]>('/campaigns');
+      return data;
+    },
+    staleTime: 30_000,
+    placeholderData: [],
+  });
+  const campaignCount = campaigns.filter((c) => c.status === 'in_progress').length;
 
   const [searchOpen, setSearchOpen] = useState(false);
 
@@ -443,7 +481,12 @@ export default function AppShell({ children }: AppShellProps) {
 
   return (
     <div className="gs-shell">
-      <Sidebar myCount={myCount} sharedCount={sharedCount} pendingCount={pendingCount} />
+      <Sidebar
+        myCount={myCount}
+        sharedCount={sharedCount}
+        pendingCount={pendingCount}
+        campaignCount={campaignCount}
+      />
       <div className="gs-main">
         <Topbar pathname={pathname} onSearchOpen={() => setSearchOpen(true)} />
         <div className="gs-content">{children}</div>
