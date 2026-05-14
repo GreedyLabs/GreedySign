@@ -27,6 +27,7 @@ import { Route as AuthActivityRouteImport } from './routes/_auth.activity'
 import { Route as DocsDocIdCompleteRouteImport } from './routes/docs.$docId_.complete'
 import { Route as AuthSettingsTabRouteImport } from './routes/_auth.settings.$tab'
 import { Route as AuthCampaignsNewRouteImport } from './routes/_auth.campaigns.new'
+import { Route as AuthCampaignsIndexRouteImport } from './routes/_auth.campaigns.index'
 import { Route as AuthCampaignsCampaignIdRouteImport } from './routes/_auth.campaigns.$campaignId'
 
 const LoginRoute = LoginRouteImport.update({
@@ -118,6 +119,11 @@ const AuthCampaignsNewRoute = AuthCampaignsNewRouteImport.update({
   path: '/new',
   getParentRoute: () => AuthCampaignsRoute,
 } as any)
+const AuthCampaignsIndexRoute = AuthCampaignsIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AuthCampaignsRoute,
+} as any)
 const AuthCampaignsCampaignIdRoute = AuthCampaignsCampaignIdRouteImport.update({
   id: '/$campaignId',
   path: '/$campaignId',
@@ -139,6 +145,7 @@ export interface FileRoutesByFullPath {
   '/docs/$docId': typeof DocsDocIdRoute
   '/invite/$token': typeof InviteTokenRoute
   '/templates/$templateId': typeof TemplatesTemplateIdRoute
+  '/campaigns/': typeof AuthCampaignsIndexRoute
   '/campaigns/$campaignId': typeof AuthCampaignsCampaignIdRoute
   '/campaigns/new': typeof AuthCampaignsNewRoute
   '/settings/$tab': typeof AuthSettingsTabRoute
@@ -149,7 +156,7 @@ export interface FileRoutesByTo {
   '/guide': typeof GuideRoute
   '/login': typeof LoginRoute
   '/activity': typeof AuthActivityRoute
-  '/campaigns': typeof AuthCampaignsRouteWithChildren
+  '/campaigns': typeof AuthCampaignsIndexRoute
   '/docs': typeof AuthDocsRoute
   '/notifications': typeof AuthNotificationsRoute
   '/settings': typeof AuthSettingsRouteWithChildren
@@ -181,6 +188,7 @@ export interface FileRoutesById {
   '/docs/$docId': typeof DocsDocIdRoute
   '/invite/$token': typeof InviteTokenRoute
   '/templates/$templateId': typeof TemplatesTemplateIdRoute
+  '/_auth/campaigns/': typeof AuthCampaignsIndexRoute
   '/_auth/campaigns/$campaignId': typeof AuthCampaignsCampaignIdRoute
   '/_auth/campaigns/new': typeof AuthCampaignsNewRoute
   '/_auth/settings/$tab': typeof AuthSettingsTabRoute
@@ -203,6 +211,7 @@ export interface FileRouteTypes {
     | '/docs/$docId'
     | '/invite/$token'
     | '/templates/$templateId'
+    | '/campaigns/'
     | '/campaigns/$campaignId'
     | '/campaigns/new'
     | '/settings/$tab'
@@ -244,6 +253,7 @@ export interface FileRouteTypes {
     | '/docs/$docId'
     | '/invite/$token'
     | '/templates/$templateId'
+    | '/_auth/campaigns/'
     | '/_auth/campaigns/$campaignId'
     | '/_auth/campaigns/new'
     | '/_auth/settings/$tab'
@@ -389,6 +399,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthCampaignsNewRouteImport
       parentRoute: typeof AuthCampaignsRoute
     }
+    '/_auth/campaigns/': {
+      id: '/_auth/campaigns/'
+      path: '/'
+      fullPath: '/campaigns/'
+      preLoaderRoute: typeof AuthCampaignsIndexRouteImport
+      parentRoute: typeof AuthCampaignsRoute
+    }
     '/_auth/campaigns/$campaignId': {
       id: '/_auth/campaigns/$campaignId'
       path: '/$campaignId'
@@ -400,11 +417,13 @@ declare module '@tanstack/react-router' {
 }
 
 interface AuthCampaignsRouteChildren {
+  AuthCampaignsIndexRoute: typeof AuthCampaignsIndexRoute
   AuthCampaignsCampaignIdRoute: typeof AuthCampaignsCampaignIdRoute
   AuthCampaignsNewRoute: typeof AuthCampaignsNewRoute
 }
 
 const AuthCampaignsRouteChildren: AuthCampaignsRouteChildren = {
+  AuthCampaignsIndexRoute: AuthCampaignsIndexRoute,
   AuthCampaignsCampaignIdRoute: AuthCampaignsCampaignIdRoute,
   AuthCampaignsNewRoute: AuthCampaignsNewRoute,
 }

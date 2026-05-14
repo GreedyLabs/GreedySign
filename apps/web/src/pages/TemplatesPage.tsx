@@ -114,6 +114,34 @@ export default function TemplatesPage() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: TEMPLATES_QUERY_KEY }),
   });
 
+  // ready 템플릿을 외부(목록) 에서 곧장 편집 모드로 진입.
+  // 백엔드가 in_progress 캠페인이 있으면 거부하므로 onError 에서 안내.
+  const revertMut = useMutation({
+    mutationFn: async (id: Template['id']) => {
+      await api.patch(API_ENDPOINTS.templates.update(id), { status: 'draft' });
+    },
+  });
+
+  const handleEdit = (tpl: Template) => {
+    if (tpl.status === 'draft') {
+      navigate(`/templates/${tpl.id}`);
+      return;
+    }
+    if (
+      !confirm(
+        '편집 가능 상태로 되돌립니다.\n이미 발송된 문서·서명은 영향받지 않지만, 이 템플릿을 사용하는 진행 중 캠페인이 있다면 되돌릴 수 없습니다.',
+      )
+    )
+      return;
+    revertMut.mutate(tpl.id, {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: TEMPLATES_QUERY_KEY });
+        navigate(`/templates/${tpl.id}`);
+      },
+      onError: (err) => alert(errorMessage(err, '편집으로 되돌리기 실패')),
+    });
+  };
+
   const handleDelete = (tpl: Template) => {
     const msg =
       (tpl.campaign_count ?? 0) > 0
@@ -172,7 +200,7 @@ export default function TemplatesPage() {
     {
       key: 'actions',
       header: '',
-      width: '170px',
+      width: '240px',
       align: 'end',
       stopPropagation: true,
       render: (t) => (
@@ -196,6 +224,19 @@ export default function TemplatesPage() {
               </button>
             </>
           )}
+          <button
+            className="btn btn-ghost btn-sm"
+            onClick={() => handleEdit(t)}
+            disabled={revertMut.isPending}
+            title={
+              t.status === 'ready'
+                ? '편집 가능(draft) 상태로 되돌린 뒤 에디터로 진입'
+                : '에디터 열기'
+            }
+            style={{ marginRight: 6 }}
+          >
+            편집
+          </button>
           <button className="btn btn-ghost btn-sm" onClick={() => handleDelete(t)} title="삭제">
             삭제
           </button>

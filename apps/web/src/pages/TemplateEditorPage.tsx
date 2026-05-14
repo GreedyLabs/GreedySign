@@ -283,6 +283,20 @@ function FieldOverlay({
 
   const pageFields = fields.filter((f) => (f.page_number || 1) === currentPage);
 
+  // 필드 본체에 표시할 타입 라벨 — EditLayer 의 fieldTypeLabel 과 동일.
+  const typeLabel = (t: string): string =>
+    t === 'signature'
+      ? '서명'
+      : t === 'initial'
+        ? '이니셜'
+        : t === 'text'
+          ? '텍스트'
+          : t === 'checkbox'
+            ? '체크박스'
+            : t === 'date'
+              ? '날짜'
+              : t;
+
   return (
     <svg
       ref={svgRef}
@@ -304,19 +318,38 @@ function FieldOverlay({
         const sh = toScreenX(field.height);
         const isSelected = selectedId === field.id;
         const color = TEMPLATE_COLOR;
+        // EditLayer setup 모드와 동일한 알파 톤(선택=24, 비선택=14).
+        const bgAlphaHex = isSelected ? '24' : '14';
 
         return (
           <g key={field.id}>
+            {/* Selection ring (outside) — EditLayer 와 동일 */}
+            {isSelected && (
+              <rect
+                x={sx - 2}
+                y={sy - 2}
+                width={sw + 4}
+                height={sh + 4}
+                rx={5}
+                fill="none"
+                stroke={color}
+                strokeWidth={2}
+                opacity={0.18}
+                style={{ pointerEvents: 'none' }}
+              />
+            )}
+
+            {/* Field background */}
             <rect
               x={sx}
               y={sy}
               width={sw}
               height={sh}
-              fill={`${color}18`}
+              fill={`${color}${bgAlphaHex}`}
               stroke={color}
-              strokeWidth={isSelected ? 2 : 1}
+              strokeWidth={1.5}
               strokeDasharray={!isSelected ? '4 2' : 'none'}
-              rx={4}
+              rx={3}
               style={{ cursor: readOnly ? 'default' : 'pointer' }}
               onClick={(e) => {
                 e.stopPropagation();
@@ -326,114 +359,65 @@ function FieldOverlay({
                 if (!readOnly) startInteract(e, field.id, 'drag');
               }}
             />
-            {/* 필드 타입 힌트: OS 이모지 폰트 의존을 피해 타입별 SVG 프리미티브로. */}
-            <g
+
+            {/* 필드 본체 안 타입 라벨 — EditLayer setup 모드와 동일 */}
+            <text
+              x={sx + sw / 2}
+              y={sy + sh / 2 + 4}
+              textAnchor="middle"
+              fontSize={Math.min(11, sh * 0.45)}
+              fill={color}
               opacity={0.8}
-              style={{ pointerEvents: 'none', userSelect: 'none' }}
+              style={{
+                pointerEvents: 'none',
+                userSelect: 'none',
+                fontWeight: 500,
+                letterSpacing: '0.02em',
+              }}
             >
-              {field.field_type === 'text' && (
-                <text
-                  x={sx + sw / 2}
-                  y={sy + sh / 2 + 4}
-                  textAnchor="middle"
-                  fontSize={Math.min(11, sh * 0.45)}
-                  fill={color}
-                >
-                  Aa
-                </text>
-              )}
-              {field.field_type === 'checkbox' && (
-                <rect
-                  x={sx + sw / 2 - Math.min(7, sh * 0.25)}
-                  y={sy + sh / 2 - Math.min(7, sh * 0.25)}
-                  width={Math.min(14, sh * 0.5)}
-                  height={Math.min(14, sh * 0.5)}
-                  fill="none"
-                  stroke={color}
-                  strokeWidth={1.2}
-                  rx={2}
-                />
-              )}
-              {field.field_type === 'signature' && (
-                <path
-                  // 흘려 쓴 서명 느낌의 짧은 곡선
-                  d={`M ${sx + sw * 0.3} ${sy + sh * 0.65}
-                      q ${sw * 0.1} ${-sh * 0.4} ${sw * 0.2} 0
-                      t ${sw * 0.2} 0`}
-                  stroke={color}
-                  strokeWidth={1.4}
-                  fill="none"
-                  strokeLinecap="round"
-                />
-              )}
-              {field.field_type === 'date' && (
-                <g
-                  stroke={color}
-                  strokeWidth={1.2}
-                  fill="none"
-                  strokeLinecap="round"
-                >
-                  {/* 달력 아이콘 — 상단 스파이럴 + 본체 + 헤더 라인 */}
-                  <rect
-                    x={sx + sw / 2 - Math.min(8, sh * 0.3)}
-                    y={sy + sh / 2 - Math.min(7, sh * 0.25)}
-                    width={Math.min(16, sh * 0.6)}
-                    height={Math.min(14, sh * 0.5)}
-                    rx={1.5}
-                  />
-                  <line
-                    x1={sx + sw / 2 - Math.min(8, sh * 0.3)}
-                    y1={sy + sh / 2 - Math.min(2, sh * 0.08)}
-                    x2={sx + sw / 2 + Math.min(8, sh * 0.3)}
-                    y2={sy + sh / 2 - Math.min(2, sh * 0.08)}
-                  />
-                </g>
-              )}
-            </g>
+              {typeLabel(field.field_type)}
+            </text>
+
+            {/* 선택됨: 배정 칩(상단) + 리사이즈 핸들(우하단).
+                삭제는 우측 사이드바 "필드 속성" 패널로 위임 — EditLayer 패턴. */}
             {isSelected && !readOnly && (
               <>
-                {/* Drag handle */}
-                <rect
-                  x={sx}
+                <foreignObject
+                  x={sx - 1}
                   y={sy - 20}
-                  width={sw}
+                  width={Math.max(120, 110)}
                   height={20}
-                  fill={color}
-                  opacity={0.9}
-                  rx={4}
-                  style={{ cursor: 'grab' }}
-                  onMouseDown={(e) => startInteract(e, field.id, 'drag')}
-                />
-                {/* Delete button */}
-                <g
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    deleteField(field.id);
-                  }}
-                  style={{ cursor: 'pointer' }}
+                  style={{ overflow: 'visible' }}
                 >
-                  <circle cx={sx + sw} cy={sy} r={9} fill="#ef4444" />
-                  <text
-                    x={sx + sw}
-                    y={sy + 4}
-                    textAnchor="middle"
-                    fontSize={12}
-                    fill="white"
-                    style={{ pointerEvents: 'none' }}
+                  <div
+                    {...({ xmlns: 'http://www.w3.org/1999/xhtml' } as unknown as Record<
+                      string,
+                      unknown
+                    >)}
+                    style={{
+                      display: 'inline-block',
+                      background: color,
+                      color: '#fff',
+                      fontSize: 10,
+                      fontWeight: 500,
+                      padding: '1px 6px',
+                      borderRadius: 2,
+                      lineHeight: 1.4,
+                      letterSpacing: '0.02em',
+                      whiteSpace: 'nowrap',
+                      fontFamily: 'var(--font-sans)',
+                    }}
                   >
-                    ×
-                  </text>
-                </g>
-                {/* Resize handle */}
+                    수신자 · {typeLabel(field.field_type)}
+                  </div>
+                </foreignObject>
                 <rect
-                  x={sx + sw - 5}
-                  y={sy + sh - 5}
-                  width={10}
-                  height={10}
-                  rx={2}
-                  fill="white"
-                  stroke="#6b7280"
-                  strokeWidth={1.5}
+                  x={sx + sw - 4}
+                  y={sy + sh - 4}
+                  width={8}
+                  height={8}
+                  rx={1}
+                  fill={color}
                   style={{ cursor: 'nwse-resize' }}
                   onMouseDown={(e) => startInteract(e, field.id, 'resize')}
                 />
@@ -520,12 +504,23 @@ export default function TemplateEditorPage() {
   const handleRename = () => {
     const next = prompt('템플릿 이름', template?.name ?? '');
     if (!next || !template || next === template.name) return;
-    updateMut.mutate({ name: next });
+    updateMut.mutate(
+      { name: next },
+      { onError: (err) => alert(errorMessage(err, '이름 변경 실패')) },
+    );
   };
 
   const handleRevertToDraft = () => {
-    if (!confirm('다시 편집 가능 상태로 되돌리시겠습니까?')) return;
-    updateMut.mutate({ status: 'draft' });
+    if (
+      !confirm(
+        '편집 가능 상태로 되돌립니다.\n이미 발송된 문서·서명은 영향받지 않지만, 이 템플릿을 사용하는 진행 중 캠페인이 있다면 되돌릴 수 없습니다.',
+      )
+    )
+      return;
+    updateMut.mutate(
+      { status: 'draft' },
+      { onError: (err) => alert(errorMessage(err, '편집으로 되돌리기 실패')) },
+    );
   };
 
   if (isLoading || !template) {

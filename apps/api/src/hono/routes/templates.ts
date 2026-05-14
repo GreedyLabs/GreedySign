@@ -170,6 +170,27 @@ templates.patch('/:id', validate('json', UpdateTemplateBody), async (c) => {
       if (!count) return c.json({ error: '필드가 1개 이상 필요합니다' }, 400);
     }
 
+    // ready → draft 되돌림: 진행 중 캠페인이 이 템플릿을 쓰고 있으면 거부.
+    // 이유: 캠페인에 나중에 수신자가 추가/교체될 때 발송 시점의 현재 필드를
+    // 복제(form_fields)하므로, 같은 캠페인 안에서 수신자별로 필드가 달라질 수
+    // 있다. 이미 발송된 문서/완료 서명은 자기 form_fields 사본을 가지고 있어
+    // 영향 없음.
+    if (status === 'draft' && owned.template.status === 'ready') {
+      const [{ count }] = (await db.execute(sql`
+        SELECT COUNT(*)::int AS count FROM signing_campaigns
+        WHERE template_id = ${id}::uuid AND status = 'in_progress'
+      `)).rows as Array<{ count: number }>;
+      if (count > 0) {
+        return c.json(
+          {
+            error:
+              '진행 중인 캠페인이 이 템플릿을 사용 중이라 편집으로 되돌릴 수 없습니다. 캠페인이 완료/취소된 뒤 다시 시도하세요.',
+          },
+          400,
+        );
+      }
+    }
+
     const [updated] = await db
       .update(documentTemplates)
       .set({
